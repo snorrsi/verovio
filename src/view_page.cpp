@@ -396,6 +396,10 @@ void View::DrawStaffDefLabels(DeviceContext *dc, Measure *measure, ScoreDef *sco
         std::wstring labelAbbrStr = (labelAbbr) ? labelAbbr->GetText(labelAbbr) : L"";
         std::wstring labelStr = (label) ? label->GetText(label) : L"";
 
+        // SS
+        ++iter;
+        continue;
+        
         if (abbreviations) {
             labelStr = labelAbbrStr;
             graphic = labelAbbr;

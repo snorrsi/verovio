@@ -45,6 +45,9 @@ const char *UTF_16_LE_BOM = "\xFF\xFE";
 // Toolkit
 //----------------------------------------------------------------------------
 
+// SS Made extern
+extern "C" {
+    
 char *Toolkit::m_humdrumBuffer = NULL;
 
 Toolkit::Toolkit(bool initFont)
@@ -1073,6 +1076,20 @@ std::string Toolkit::RenderToTimemap()
     return output;
 }
 
+// SS
+// Create time map, use force if should create even if exists.
+void Toolkit::CreateTimemap(bool force) {
+
+    if (!m_doc.HasMidiTimemap() || (force == true)) {
+        // generate MIDI timemap before progressing
+        m_doc.CalculateMidiTimemap();
+    }
+    if (!m_doc.HasMidiTimemap()) {
+        LogWarning("Calculation of MIDI timemap failed, time value is invalid.");
+    }
+    
+}
+    
 std::string Toolkit::GetElementsAtTime(int millisec)
 {
     jsonxx::Object o;
@@ -1403,3 +1420,5 @@ const char *Toolkit::GetCString()
 }
 
 } // namespace vrv
+
+} // SS EXTERN ENDS

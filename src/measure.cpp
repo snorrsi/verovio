@@ -691,10 +691,12 @@ int Measure::AdjustXPos(FunctorParams *functorParams)
 
     // With a double measure with element (mRpt2, multiRpt)
     if (fullMeasure2 != NULL) {
+        // SS
         minMeasureWidth *= 2;
     }
     // Nothing if the measure has at least one note or @metcon="false"
     else if ((this->FindChildByType(NOTE) != NULL) || (this->GetMetcon() == BOOLEAN_false)) {
+        // SS
         minMeasureWidth = 0;
     }
 

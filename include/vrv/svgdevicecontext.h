@@ -107,6 +107,10 @@ public:
     ///@{
     virtual void StartGraphic(Object *object, std::string gClass, std::string gId);
     virtual void EndGraphic(Object *object, View *view);
+    
+    // SS
+    virtual void StartGraphicSSNotation(Object *object, std::string gClass, std::string gId);
+
     ///@}
 
     /**

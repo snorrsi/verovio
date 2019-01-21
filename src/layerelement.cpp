@@ -1229,10 +1229,35 @@ int LayerElement::CalcOnsetOffset(FunctorParams *functorParams)
     double incrementScoreTime;
 
     // Now deal with the different elements
-    if (this->Is(REST) || this->Is(SPACE)) {
+    //if (this->Is(REST) || this->Is(SPACE)) {
+    if (this->Is(SPACE)) {
         double incrementScoreTime = GetAlignmentDuration() / (DUR_MAX / DURATION_4);
+        // SS
         params->m_currentScoreTime += incrementScoreTime;
         params->m_currentRealTimeSeconds += incrementScoreTime * 60.0 / params->m_currentTempo;
+        
+    } else if (this->Is(REST)) {
+        double incrementScoreTime = GetAlignmentDuration() / (DUR_MAX / DURATION_4);
+        // SS
+        //params->m_currentScoreTime += incrementScoreTime;
+        //params->m_currentRealTimeSeconds += incrementScoreTime * 60.0 / params->m_currentTempo;
+        Rest *rest = dynamic_cast<Rest *>(this);
+        assert(rest);
+        
+        double realTimeIncrementSeconds = incrementScoreTime * 60.0 / params->m_currentTempo;
+        
+        // LogDebug("Note Alignment Duration %f - Dur %d - Diatonic Pitch %d - Track %d", GetAlignmentDuration(),
+        // note->GetNoteOrChordDur(this), note->GetDiatonicPitch(), *midiTrack);
+        // LogDebug("Oct %d - Pname %d - Accid %d", note->GetOct(), note->GetPname(), note->GetAccid());
+        
+        rest->SetScoreTimeOnset(params->m_currentScoreTime);
+        rest->SetRealTimeOnsetSeconds(params->m_currentRealTimeSeconds);
+        rest->SetScoreTimeOffset(params->m_currentScoreTime + incrementScoreTime);
+        rest->SetRealTimeOffsetSeconds(params->m_currentRealTimeSeconds + realTimeIncrementSeconds);
+        
+        params->m_currentScoreTime += incrementScoreTime;
+        params->m_currentRealTimeSeconds += realTimeIncrementSeconds;
+        
     }
     else if (this->Is(NOTE)) {
         Note *note = dynamic_cast<Note *>(this);

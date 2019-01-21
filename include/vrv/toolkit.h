@@ -144,6 +144,9 @@ public:
     std::string RenderToTimemap();
     bool RenderToTimemapFile(const std::string &filename);
 
+    // SS
+    void CreateTimemap(bool force);
+    
     const char *GetHumdrumBuffer();
     void SetHumdrumBuffer(const char *contents);
 

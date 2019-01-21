@@ -400,7 +400,7 @@ int main(int argc, char **argv)
     }
 
     if ((outformat != "svg") && (outformat != "mei") && (outformat != "midi") && (outformat != "timemap")
-        && (outformat != "humdrum") && (outformat != "hum")) {
+        && (outformat != "humdrum") && (outformat != "hum") && (outformat != "svgmidi")) {
         std::cerr << "Output format (" << outformat << ") can only be 'mei', 'svg', 'midi', or 'humdrum'." << std::endl;
         exit(1);
     }
@@ -480,7 +480,41 @@ int main(int argc, char **argv)
             }
         }
     }
-
+    // SS BEGIN
+    else if (outformat == "svgmidi") {
+        // SS toolkit.CreateTimemap(true);
+        outfile += ".mid";
+        if (std_output) {
+            std::cerr << "Midi cannot write to standard output." << std::endl;
+            exit(1);
+        }
+        else if (!toolkit.RenderToMIDIFile(outfile)) {
+            std::cerr << "Unable to write MIDI to " << outfile << "." << std::endl;
+            exit(1);
+        }
+        else {
+            std::cerr << "Output written to " << outfile << "." << std::endl;
+            int p;
+            for (p = from; p < to; p++) {
+                std::string cur_outfile = outfile;
+                if (all_pages) {
+                    cur_outfile += vrv::StringFormat("_%03d", p);
+                }
+                cur_outfile += ".svg";
+                if (std_output) {
+                    std::cout << toolkit.RenderToSVG(p);
+                }
+                else if (!toolkit.RenderToSVGFile(cur_outfile, p)) {
+                    std::cerr << "Unable to write SVG to " << cur_outfile << "." << std::endl;
+                    exit(1);
+                }
+                else {
+                    std::cerr << "Output written to " << cur_outfile << "." << std::endl;
+                }
+            }
+        }
+    }
+    // SS END
     else if (outformat == "midi") {
         outfile += ".mid";
         if (std_output) {

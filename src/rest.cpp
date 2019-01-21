@@ -234,4 +234,96 @@ int Rest::ResetHorizontalAlignment(FunctorParams *functorParams)
     return FUNCTOR_CONTINUE;
 }
 
+// SS BEGIN
+
+// Not functor functions, just keeping changed items together
+    
+void Rest::SetScoreTimeOnset(double scoreTime)
+{
+    m_scoreTimeOnset = scoreTime;
+}
+
+void Rest::SetRealTimeOnsetSeconds(double timeInSeconds)
+{
+    m_realTimeOnsetMilliseconds = int(timeInSeconds * 1000.0 + 0.5);
+}
+
+void Rest::SetScoreTimeOffset(double scoreTime)
+{
+    m_scoreTimeOffset = scoreTime;
+}
+
+void Rest::SetRealTimeOffsetSeconds(double timeInSeconds)
+{
+    m_realTimeOffsetMilliseconds = int(timeInSeconds * 1000.0 + 0.5);
+}
+
+void Rest::SetScoreTimeTiedDuration(double scoreTime)
+{
+    m_scoreTimeTiedDuration = scoreTime;
+}
+
+double Rest::GetScoreTimeOnset()
+{
+    return m_scoreTimeOnset;
+}
+
+int Rest::GetRealTimeOnsetMilliseconds()
+{
+    return m_realTimeOnsetMilliseconds;
+}
+
+double Rest::GetScoreTimeOffset()
+{
+    return m_scoreTimeOffset;
+}
+
+int Rest::GetRealTimeOffsetMilliseconds()
+{
+    return m_realTimeOffsetMilliseconds;
+}
+
+double Rest::GetScoreTimeTiedDuration()
+{
+    return m_scoreTimeTiedDuration;
+}
+
+double Rest::GetScoreTimeDuration()
+{
+    return GetScoreTimeOffset() - GetScoreTimeOnset();
+}
+    
+    
+int Rest::GenerateTimemap(FunctorParams *functorParams)
+{
+    GenerateTimemapParams *params = dynamic_cast<GenerateTimemapParams *>(functorParams);
+    assert(params);
+    
+    int realTimeStart = params->m_realTimeOffsetMilliseconds + m_realTimeOnsetMilliseconds;
+    double scoreTimeStart = params->m_scoreTimeOffset + m_scoreTimeOnset;
+    
+    int realTimeEnd = params->m_realTimeOffsetMilliseconds + m_realTimeOffsetMilliseconds;
+    double scoreTimeEnd = params->m_scoreTimeOffset + m_scoreTimeOffset;
+    
+    // Should check if value for realTimeStart already exists and if so, then
+    // ensure that it is equal to scoreTimeStart:
+    params->realTimeToScoreTime[realTimeStart] = scoreTimeStart;
+    
+    // Store the element ID in list to turn on at given time.
+    params->realTimeToOnElements[realTimeStart].push_back(this->GetUuid());
+    
+    // Should check if value for realTimeEnd already exists and if so, then
+    // ensure that it is equal to scoreTimeEnd:
+    params->realTimeToScoreTime[realTimeEnd] = scoreTimeEnd;
+    
+    // Store the element ID in list to turn off at given time.
+    params->realTimeToOffElements[realTimeEnd].push_back(this->GetUuid());
+    
+    params->realTimeToTempo[realTimeStart] = params->m_currentTempo;
+    
+    return FUNCTOR_SIBLINGS;
+}
+
+// SS END
+    
 } // namespace vrv

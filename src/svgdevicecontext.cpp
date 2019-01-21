@@ -21,6 +21,12 @@
 #include "staffdef.h"
 #include "view.h"
 #include "vrv.h"
+// SS BEGIN
+#include "measure.h"
+#include "note.h"
+#include "rest.h"
+#include "atttypes.h"
+// SS END
 
 //----------------------------------------------------------------------------
 
@@ -141,6 +147,219 @@ void SvgDeviceContext::Commit(bool xml_declaration)
     m_committed = true;
 }
 
+// SS
+void SvgDeviceContext::StartGraphicSSNotation(Object *object, std::string gClass, std::string gId) {
+    
+    int measureIdx = -1;
+    
+    // SS
+    if (object->Is(MEASURE)) {
+        Measure *measure = dynamic_cast<Measure *>(object);
+        Measure *myMeasure = dynamic_cast<Measure *>(object);
+        assert(measure);
+        assert(myMeasure);
+        //measureIdx = object->GetIdx(); //(int) measure->GetN();
+        measureIdx = measure->GetIdx();
+        m_currentNode.append_attribute("measureNr") = measureIdx;
+        Object * object2 = measure->GetFirstParentInRange(LAYER_ELEMENT, LAYER_ELEMENT_max);
+        if (object2 != NULL) {
+            //LayerElement *le = dynamic_cast<LayerElement*>(object2);
+            //m_currentNode.append_attribute("dur") = le->GetAlignmentDuration();
+        }
+        
+        /*
+        double timeofElementOn = myMeasure->GetRealTimeOnsetMilliseconds();
+        double timeofElementOff = myMeasure->GetRealTimeOffsetMilliseconds();
+        
+        double timeofElementDuration = timeofElementOff - timeofElementOn;
+        m_currentNode.append_attribute("time_on") = timeofElementOn;
+        m_currentNode.append_attribute("time_off") = timeofElementOff;
+        */
+    }
+    
+    int staffIdx = -1;
+    
+    if (object->Is(STAFF)) {
+        Staff *staff = dynamic_cast<Staff *>(object);
+        assert(staff);
+        staffIdx = staff->GetN();
+        m_currentNode.append_attribute("staffNr") = staffIdx;
+    }
+
+    // SS
+    // should 1000 / 120 / 2 be there?
+    if (object->Is(REST)) {
+        Rest *rest = dynamic_cast<Rest *>(object);
+        assert(rest);
+        //double timeofElementOn = rest->m_playingOnset *1000.0 / 120.0 / 2.0;
+        //double timeofElementOff = rest->m_playingOffset *1000.0 / 120.0 / 2.0;
+        double timeofElementOn = rest->GetRealTimeOnsetMilliseconds();
+        double timeofElementOff = rest->GetRealTimeOffsetMilliseconds();
+        
+        double timeofElementDuration = timeofElementOff - timeofElementOn;
+        m_currentNode.append_attribute("time_on") = timeofElementOn;
+        m_currentNode.append_attribute("time_off") = timeofElementOff;
+        m_currentNode.append_attribute("time_len") = timeofElementDuration;
+    }
+    
+    if (object->Is(NOTE)) {
+        Note *note = dynamic_cast<Note *>(object);
+        assert(note);
+        //double timeofElementOn = note->m_playingOnset *1000.0 / 120.0 / 2.0;
+        //double timeofElementOff = note->m_playingOffset *1000.0 / 120.0 / 2.0;
+        double timeofElementOn = note->GetRealTimeOnsetMilliseconds();
+        double timeofElementOff = note->GetRealTimeOffsetMilliseconds();
+        
+        double timeofElementDuration = timeofElementOff - timeofElementOn;
+        
+        int measureNoteIdx = -1;
+        
+        /*
+         Object *m_obj = object->GetFirstParent(MEASURE);
+         if (m_obj != NULL) {
+         Measure *measure = dynamic_cast<Measure *>(m_obj);
+         measureNoteIdx = measure->GetChildIndex(note);
+         Object *current_note_obj = measure->GetFirst(NOTE);
+         Note *first_note = dynamic_cast<Note *>(current_note_obj);
+         
+         float measureOnRaw = first_note->m_playingOnset;
+         float measureOffRaw = first_note->m_playingOffset;
+         
+         while (current_note_obj) {
+         current_note_obj->GetNext();
+         Note *current_note = dynamic_cast<Note *>(current_note_obj);
+         if (current_note->m_playingOffset > measureOffRaw) {
+         measureOffRaw = current_note->m_playingOffset;
+         }
+         }
+         float measureOn = measureOnRaw * 1000 / 120;
+         float measureOff = measureOffRaw * 1000 / 120;
+         m_currentNode.append_attribute("m_on") = measureOn;
+         m_currentNode.append_attribute("m_off") = measureOff;
+         }
+         */
+        
+        int alter = 0;
+        std::string pNameStr = "";
+        std::string step = "";
+        
+        Accid *accid = note->GetDrawingAccid();
+        
+        // Create midi note
+        int midiBase = 0;
+        data_PITCHNAME pname = note->GetPname();
+        switch (pname) {
+            case PITCHNAME_c: step = "C"; midiBase = 0; break;
+            case PITCHNAME_d: step = "D"; midiBase = 2; break;
+            case PITCHNAME_e: step = "E"; midiBase = 4; break;
+            case PITCHNAME_f: step = "F"; midiBase = 5; break;
+            case PITCHNAME_g: step = "G"; midiBase = 7; break;
+            case PITCHNAME_a: step = "A"; midiBase = 9; break;
+            case PITCHNAME_b: step = "B"; midiBase = 11; break;
+            case PITCHNAME_NONE: break;
+        }
+        // Check for accidentals
+        if (accid && accid->HasAccidGes()) {
+            //data_ACCIDENTAL_IMPLICIT accImp = accid->GetAccidGes();
+            data_ACCIDENTAL_GESTURAL accImp = accid->GetAccidGes();
+            switch (accImp) {
+                case ACCIDENTAL_GESTURAL_s: alter = 1; midiBase += 1; break;
+                case ACCIDENTAL_GESTURAL_f: alter = -1; midiBase -= 1; break;
+                case ACCIDENTAL_GESTURAL_ss: alter = 2; midiBase += 2; break;
+                case ACCIDENTAL_GESTURAL_ff: alter = -2; midiBase -= 2; break;
+                default: break;
+            }
+        }
+        else if (accid) {
+            //data_ACCIDENTAL_EXPLICIT accExp = accid->GetAccid();
+            data_ACCIDENTAL_WRITTEN accExp = accid->GetAccid();
+            switch (accExp) {
+                case ACCIDENTAL_WRITTEN_s: alter = 1; midiBase += 1; break;
+                case ACCIDENTAL_WRITTEN_f: alter = -1; midiBase -= 1; break;
+                case ACCIDENTAL_WRITTEN_ss: alter = 2; midiBase += 2; break;
+                case ACCIDENTAL_WRITTEN_x: alter = 2; midiBase += 2; break;
+                case ACCIDENTAL_WRITTEN_ff: alter = -2; midiBase -= 2; break;
+                case ACCIDENTAL_WRITTEN_xs: alter = 3; midiBase += 3; break;
+                case ACCIDENTAL_WRITTEN_ts: alter = 3; midiBase += 3; break;
+                case ACCIDENTAL_WRITTEN_tf: alter = -3; midiBase -= 3; break;
+                case ACCIDENTAL_WRITTEN_nf: alter = -1; midiBase -= 1; break;
+                case ACCIDENTAL_WRITTEN_ns: alter = 1; midiBase += 1; break;
+                default: break;
+            }
+        }
+        
+        // Adjustment for transposition intruments
+        // SS is this needed ?
+        //midiBase += params->m_transSemi;
+        
+        
+        int oct = note->GetOct();
+        if (note->HasOctGes()) oct = note->GetOctGes();
+        
+        int pitch = midiBase + (oct + 1) * 12;
+        
+        int inBeam = false;
+        if (note->IsInBeam() != NULL) {
+            inBeam = true;
+        }
+        
+        Object *layer_obj = object->GetFirstParent(LAYER);
+        //if (layer_obj != NULL) {
+        //    Layer *layer = dynamic_cast<Layer *>(layer_obj);
+        //}
+        
+        //int timeOn = (int) (timeofElementOn / 64) * 4;
+        //int timeOff = (int) (timeofElementOff / 64) * 4;
+        
+        // Really really low resolution timing
+        
+        int period = 62.5;//125; //2000 / 16;
+        
+        //int timeOn = (int) (timeofElementOn / 64);
+        int timeOn = (int) (timeofElementOn / period);
+        int timeOff = (int) (timeofElementOff / period);
+        
+        // NOT USED AS NOT IN SYNC WITH OLD MIDI FILE
+        //int eventOn = (int) note->m_eventOn;
+        //int eventOff = (int) note->m_eventOff;
+
+        m_currentNode.append_attribute("pname") = step.c_str(); // pNameStr.c_str();
+        m_currentNode.append_attribute("step") = step.c_str();
+        m_currentNode.append_attribute("alter") = alter;
+        m_currentNode.append_attribute("oct") = oct;
+        
+        m_currentNode.append_attribute("pitch") = pitch;
+        
+        //m_currentNode.append_attribute("time_on") = (int) timeofElementOn;
+        //m_currentNode.append_attribute("time_off") = (int) timeofElementOff;
+        //m_currentNode.append_attribute("time_len") = (int) timeofElementDuration;
+        
+        
+        
+        //m_currentNode.append_attribute("time_on") = (eventOn == -1) ? -1 : timeofElementOn;
+        //m_currentNode.append_attribute("time_off") = (eventOff == -1) ? -1 : timeofElementOff;
+        
+        m_currentNode.append_attribute("time_on") = timeofElementOn;
+        m_currentNode.append_attribute("time_off") = timeofElementOff;
+        
+        
+        
+        m_currentNode.append_attribute("time_len") = timeofElementDuration;
+        
+        if (note->GetScoreTimeTiedDuration() < 0) {
+            int eventOn = -1;
+            int eventOff = -1;
+            m_currentNode.append_attribute("event_on") = eventOn;
+            m_currentNode.append_attribute("event_off") = eventOff;
+        }
+        
+        //m_currentNode.append_attribute("fill") = vrv::RGBToHexStr(timeOn*4,pitch,timeOff*4).c_str();
+        
+        //m_currentNode.append_attribute("fill") = "red";
+    }
+    
+}
+    
 void SvgDeviceContext::StartGraphic(Object *object, std::string gClass, std::string gId)
 {
     std::string baseClass = object->GetClassName();
@@ -164,6 +383,9 @@ void SvgDeviceContext::StartGraphic(Object *object, std::string gClass, std::str
         m_currentNode.append_attribute("id") = gId.c_str();
     }
 
+    // SS
+    StartGraphicSSNotation(object, gClass, gId);
+    
     // this sets staffDef styles for lyrics
     if (object->Is(STAFF)) {
         Staff *staff = dynamic_cast<Staff *>(object);
