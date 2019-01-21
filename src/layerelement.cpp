@@ -9,6 +9,7 @@
 
 #include <assert.h>
 #include <math.h>
+#include <iostream>
 
 //----------------------------------------------------------------------------
 
@@ -1222,52 +1223,52 @@ int LayerElement::CalcOnsetOffset(FunctorParams *functorParams)
 {
     CalcOnsetOffsetParams *params = dynamic_cast<CalcOnsetOffsetParams *>(functorParams);
     assert(params);
-
-    // Here we need to check if the LayerElement has a duration, otherwise we can continue
-    if (!this->HasInterface(INTERFACE_DURATION)) return FUNCTOR_CONTINUE;
-
+    
     double incrementScoreTime;
-
-    // Now deal with the different elements
-    //if (this->Is(REST) || this->Is(SPACE)) {
-    if (this->Is(SPACE)) {
-        double incrementScoreTime = GetAlignmentDuration() / (DUR_MAX / DURATION_4);
-        // SS
+    
+    if (this->Is(REST) || this->Is(SPACE)) {
+        incrementScoreTime = this->GetAlignmentDuration(
+                                                        params->m_currentMensur, params->m_currentMeterSig, true, params->m_notationType);
+        incrementScoreTime = incrementScoreTime / (DUR_MAX / DURATION_4);
         params->m_currentScoreTime += incrementScoreTime;
         params->m_currentRealTimeSeconds += incrementScoreTime * 60.0 / params->m_currentTempo;
+    }
+    else if (this->Is(NOTE)) {
+        Note *note = dynamic_cast<Note *>(this);
+        assert(note);
         
-    } else if (this->Is(REST)) {
-        double incrementScoreTime = GetAlignmentDuration() / (DUR_MAX / DURATION_4);
-        // SS
-        //params->m_currentScoreTime += incrementScoreTime;
-        //params->m_currentRealTimeSeconds += incrementScoreTime * 60.0 / params->m_currentTempo;
-        Rest *rest = dynamic_cast<Rest *>(this);
-        assert(rest);
+        // For now just ignore grace notes
+        if (note->IsGraceNote()) return FUNCTOR_CONTINUE;
         
+        Chord *chord = note->IsChordTone();
+        
+        // If the note has a @dur or a @dur.ges, take it into account
+        // This means that overwriting only @dots or @dots.ges will not be taken into account
+        if (chord && !note->HasDur() && !note->HasDurGes()) {
+            incrementScoreTime = chord->GetAlignmentDuration(
+                                                             params->m_currentMensur, params->m_currentMeterSig, true, params->m_notationType);
+        }
+        else {
+            incrementScoreTime = note->GetAlignmentDuration(
+                                                            params->m_currentMensur, params->m_currentMeterSig, true, params->m_notationType);
+        }
+        incrementScoreTime = incrementScoreTime / (DUR_MAX / DURATION_4);
         double realTimeIncrementSeconds = incrementScoreTime * 60.0 / params->m_currentTempo;
         
         // LogDebug("Note Alignment Duration %f - Dur %d - Diatonic Pitch %d - Track %d", GetAlignmentDuration(),
         // note->GetNoteOrChordDur(this), note->GetDiatonicPitch(), *midiTrack);
         // LogDebug("Oct %d - Pname %d - Accid %d", note->GetOct(), note->GetPname(), note->GetAccid());
         
-        rest->SetScoreTimeOnset(params->m_currentScoreTime);
-        rest->SetRealTimeOnsetSeconds(params->m_currentRealTimeSeconds);
-        rest->SetScoreTimeOffset(params->m_currentScoreTime + incrementScoreTime);
-        rest->SetRealTimeOffsetSeconds(params->m_currentRealTimeSeconds + realTimeIncrementSeconds);
+        note->SetScoreTimeOnset(params->m_currentScoreTime);
+        note->SetRealTimeOnsetSeconds(params->m_currentRealTimeSeconds);
+        note->SetScoreTimeOffset(params->m_currentScoreTime + incrementScoreTime);
+        note->SetRealTimeOffsetSeconds(params->m_currentRealTimeSeconds + realTimeIncrementSeconds);
         
-        params->m_currentScoreTime += incrementScoreTime;
-        params->m_currentRealTimeSeconds += realTimeIncrementSeconds;
-        
-    }
-    else if (this->Is(NOTE)) {
-        Note *note = dynamic_cast<Note *>(this);
-        assert(note);
-
-        // For now just ignore grace notes
-        if (note->HasGrace()) return FUNCTOR_CONTINUE;
-
-        Chord *chord = note->IsChordTone();
-
+        // increase the currentTime accordingly, but only if not in a chord - checkit with note->IsChordTone()
+        if (!(note->IsChordTone())) {
+            params->m_currentScoreTime += incrementScoreTime;
+            params->m_currentRealTimeSeconds += realTimeIncrementSeconds;
+        }
         // If the note has a @dur or a @dur.ges, take it into account
         // This means that overwriting only @dots or @dots.ges will not be taken into account
         if (chord && !note->HasDur() && !note->HasDurGes()) {
@@ -1278,21 +1279,7 @@ int LayerElement::CalcOnsetOffset(FunctorParams *functorParams)
         }
         incrementScoreTime = incrementScoreTime / (DUR_MAX / DURATION_4);
         double realTimeIncrementSeconds = incrementScoreTime * 60.0 / params->m_currentTempo;
-
-        // LogDebug("Note Alignment Duration %f - Dur %d - Diatonic Pitch %d - Track %d", GetAlignmentDuration(),
-        // note->GetNoteOrChordDur(this), note->GetDiatonicPitch(), *midiTrack);
-        // LogDebug("Oct %d - Pname %d - Accid %d", note->GetOct(), note->GetPname(), note->GetAccid());
-
-        note->SetScoreTimeOnset(params->m_currentScoreTime);
-        note->SetRealTimeOnsetSeconds(params->m_currentRealTimeSeconds);
-        note->SetScoreTimeOffset(params->m_currentScoreTime + incrementScoreTime);
-        note->SetRealTimeOffsetSeconds(params->m_currentRealTimeSeconds + realTimeIncrementSeconds);
-
-        // increase the currentTime accordingly, but only if not in a chord - checkit with note->IsChordTone()
-        if (!(note->IsChordTone())) {
-            params->m_currentScoreTime += incrementScoreTime;
-            params->m_currentRealTimeSeconds += realTimeIncrementSeconds;
-        }
+        params->m_currentRealTimeSeconds += incrementScoreTime * 60.0 / params->m_currentTempo;
     }
     return FUNCTOR_CONTINUE;
 }

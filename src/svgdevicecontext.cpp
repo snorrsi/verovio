@@ -16,6 +16,7 @@
 #include "doc.h"
 #include "floatingobject.h"
 #include "glyph.h"
+#include "layer.h"
 #include "layerelement.h"
 #include "staff.h"
 #include "staffdef.h"
@@ -415,7 +416,8 @@ void SvgDeviceContext::StartGraphic(Object *object, std::string gClass, std::str
         AttColor *att = dynamic_cast<AttColor *>(object);
         assert(att);
         if (att->HasColor()) {
-            m_currentNode.append_attribute("fill") = att->GetColor().c_str();
+            // SS Ignore color
+            //m_currentNode.append_attribute("fill") = att->GetColor().c_str();
         }
     }
 
