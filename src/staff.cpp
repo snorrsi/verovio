@@ -150,6 +150,17 @@ int Staff::GetDrawingY() const
     return m_cachedDrawingY;
 }
 
+bool Staff::DrawingIsVisible()
+{
+    System *system = dynamic_cast<System *>(this->GetFirstParent(SYSTEM));
+    assert(system);
+    assert(system->GetDrawingScoreDef());
+
+    StaffDef *staffDef = system->GetDrawingScoreDef()->GetStaffDef(this->GetN());
+    assert(staffDef);
+    return (staffDef->GetDrawingVisibility() != OPTIMIZATION_HIDDEN);
+}
+
 int Staff::CalcPitchPosYRel(Doc *doc, int loc)
 {
     assert(doc);
@@ -189,7 +200,7 @@ void Staff::AddLegerLines(ArrayOfLedgerLines *lines, int count, int left, int ri
 
     if ((int)lines->size() < count) lines->resize(count);
     int i = 0;
-    for (i = 0; i < count; i++) {
+    for (i = 0; i < count; ++i) {
         lines->at(i).AddDash(left, right);
     }
 }
@@ -217,7 +228,7 @@ void LedgerLine::AddDash(int left, int right)
     std::list<std::pair<int, int> >::iterator iter;
 
     // First add the dash
-    for (iter = m_dashes.begin(); iter != m_dashes.end(); iter++) {
+    for (iter = m_dashes.begin(); iter != m_dashes.end(); ++iter) {
         if (iter->first > left) break;
     }
     m_dashes.insert(iter, std::make_pair(left, right));
@@ -225,7 +236,7 @@ void LedgerLine::AddDash(int left, int right)
     // Merge overlapping dashes
     std::list<std::pair<int, int> >::iterator previous = m_dashes.begin();
     iter = m_dashes.begin();
-    iter++;
+    ++iter;
     while (iter != m_dashes.end()) {
         if (previous->second > iter->first) {
             previous->second = std::max(iter->second, previous->second);
@@ -233,7 +244,7 @@ void LedgerLine::AddDash(int left, int right)
         }
         else {
             previous = iter;
-            iter++;
+            ++iter;
         }
     }
 }
@@ -262,6 +273,47 @@ int Staff::UnsetCurrentScoreDef(FunctorParams *functorParams)
     m_drawingStaffDef = NULL;
 
     return FUNCTOR_CONTINUE;
+}
+
+int Staff::OptimizeScoreDef(FunctorParams *functorParams)
+{
+    OptimizeScoreDefParams *params = dynamic_cast<OptimizeScoreDefParams *>(functorParams);
+    assert(params);
+
+    assert(params->m_currentScoreDef);
+    StaffDef *staffDef = params->m_currentScoreDef->GetStaffDef(this->GetN());
+
+    if (!staffDef) {
+        LogDebug(
+            "Could not find staffDef for staff (%d) when optimizing scoreDef in Staff::OptimizeScoreDef", this->GetN());
+        return FUNCTOR_SIBLINGS;
+    }
+
+    // Always show all staves when there is a fermata or a tempo
+    // (without checking if the fermata is actually on that staff)
+    if (params->m_hasFermata || params->m_hasTempo) {
+        staffDef->SetDrawingVisibility(OPTIMIZATION_SHOW);
+    }
+
+    if (staffDef->GetDrawingVisibility() == OPTIMIZATION_SHOW) {
+        return FUNCTOR_SIBLINGS;
+    }
+
+    staffDef->SetDrawingVisibility(OPTIMIZATION_HIDDEN);
+
+    ArrayOfObjects layers;
+    AttComparison matchTypeLayer(LAYER);
+    this->FindAllChildByComparison(&layers, &matchTypeLayer);
+
+    ArrayOfObjects mRests;
+    AttComparison matchTypeMRest(MREST);
+    this->FindAllChildByComparison(&mRests, &matchTypeMRest);
+
+    if (mRests.size() != layers.size()) {
+        staffDef->SetDrawingVisibility(OPTIMIZATION_SHOW);
+    }
+
+    return FUNCTOR_SIBLINGS;
 }
 
 int Staff::ResetVerticalAlignment(FunctorParams *functorParams)
@@ -305,6 +357,10 @@ int Staff::AlignVertically(FunctorParams *functorParams)
     AlignVerticallyParams *params = dynamic_cast<AlignVerticallyParams *>(functorParams);
     assert(params);
 
+    if (!this->DrawingIsVisible()) {
+        return FUNCTOR_SIBLINGS;
+    }
+
     params->m_staffN = this->GetN();
 
     // this gets (or creates) the measureAligner for the measure
@@ -345,7 +401,7 @@ int Staff::FillStaffCurrentTimeSpanning(FunctorParams *functorParams)
         if ((interface->GetStartMeasure() != currentMeasure) && (interface->IsOnStaff(this->GetN()))) {
             m_timeSpanningElements.push_back(*iter);
         }
-        iter++;
+        ++iter;
     }
     return FUNCTOR_CONTINUE;
 }
@@ -377,6 +433,34 @@ int Staff::PrepareRpt(FunctorParams *functorParams)
         }
     }
     params->m_multiNumber = BOOLEAN_true;
+    return FUNCTOR_CONTINUE;
+}
+
+int Staff::CalcOnsetOffset(FunctorParams *functorParams)
+{
+    CalcOnsetOffsetParams *params = dynamic_cast<CalcOnsetOffsetParams *>(functorParams);
+    assert(params);
+
+    assert(this->m_drawingStaffDef);
+
+    if (this->m_drawingStaffDef->HasNotationtype()) {
+        params->m_notationType = this->m_drawingStaffDef->GetNotationtype();
+    }
+    else {
+        params->m_notationType = NOTATIONTYPE_cmn;
+    }
+
+    return FUNCTOR_CONTINUE;
+}
+    
+int Staff::AdjustSylSpacing(FunctorParams *functorParams)
+{
+    AdjustSylSpacingParams *params = dynamic_cast<AdjustSylSpacingParams *>(functorParams);
+    assert(params);
+    
+    // Set the staff size for this pass
+    params->m_staffSize = this->m_drawingStaffSize;
+
     return FUNCTOR_CONTINUE;
 }
 

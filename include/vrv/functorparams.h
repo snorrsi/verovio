@@ -12,7 +12,9 @@
 
 #include "vrvdef.h"
 
+namespace smf {
 class MidiFile;
+}
 
 namespace vrv {
 
@@ -20,10 +22,13 @@ class AttComparison;
 class BoundaryStartInterface;
 class Chord;
 class Clef;
+class Doc;
+class Dot;
 class Dots;
 class Dynam;
 class Ending;
 class FileOutputStream;
+class Functor;
 class Hairpin;
 class Harm;
 class KeySig;
@@ -40,6 +45,7 @@ class ScoreDef;
 class Staff;
 class StaffAlignment;
 class StaffDef;
+class StemmedDrawingInterface;
 class Syl;
 class System;
 class SystemAligner;
@@ -255,8 +261,13 @@ public:
 
 class AdjustFloatingPostionerGrpsParams : public FunctorParams {
 public:
-    AdjustFloatingPostionerGrpsParams(Doc *doc) { m_doc = doc; }
+    AdjustFloatingPostionerGrpsParams(Doc *doc)
+    {
+        m_doc = doc;
+        m_place = STAFFREL_basic_above;
+    }
     std::vector<ClassId> m_classIds;
+    data_STAFFREL_basic m_place;
     Doc *m_doc;
 };
 
@@ -295,11 +306,43 @@ public:
     AdjustSylSpacingParams(Doc *doc)
     {
         m_previousSyl = NULL;
+        m_previousMeasure = NULL;
+        m_freeSpace = 0;
+        m_staffSize = 100;
         m_doc = doc;
     }
     ArrayOfAdjustmentTuples m_overlapingSyl;
     Syl *m_previousSyl;
+    Measure *m_previousMeasure;
+    int m_freeSpace;
+    int m_staffSize;
     Doc *m_doc;
+};
+
+//----------------------------------------------------------------------------
+// AdjustXOverflowParams
+//----------------------------------------------------------------------------
+
+/**
+ * member 0: the current system
+ * member 1: the last measure;
+ * member 2: the current widest control event
+ * member 3: the margin
+ **/
+
+class AdjustXOverflowParams : public FunctorParams {
+public:
+    AdjustXOverflowParams(int margin)
+    {
+        m_currentSystem = NULL;
+        m_lastMeasure = NULL;
+        m_currentWidest = NULL;
+        m_margin = margin;
+    }
+    System *m_currentSystem;
+    Measure *m_lastMeasure;
+    FloatingPositioner *m_currentWidest;
+    int m_margin;
 };
 
 //----------------------------------------------------------------------------
@@ -383,15 +426,17 @@ public:
  * member 1: the time
  * member 2: the current Mensur
  * member 3: the current MeterSig
- * member 4: the functor for passing it to the TimeStampAligner
- * member 5: a flag indicating whereas we are processing the caution scoreDef
- * member 6: a flag indicating is we are in the first measure (for the scoreDef role)
- * member 7: a flag indicating if we had mutliple layer alignment reference in the measure
+ * member 4: the current notation type
+ * member 5: the functor for passing it to the TimeStampAligner
+ * member 6: a flag indicating whereas we are processing the caution scoreDef
+ * member 7: a flag indicating is we are in the first measure (for the scoreDef role)
+ * member 8: a flag indicating if we had mutliple layer alignment reference in the measure
+ * member 9: the doc
  **/
 
 class AlignHorizontallyParams : public FunctorParams {
 public:
-    AlignHorizontallyParams(Functor *functor)
+    AlignHorizontallyParams(Functor *functor, Doc *doc)
     {
         m_measureAligner = NULL;
         m_time = 0.0;
@@ -399,9 +444,10 @@ public:
         m_currentMeterSig = NULL;
         m_notationType = NOTATIONTYPE_cmn;
         m_functor = functor;
-        m_scoreDefRole = NONE;
+        m_scoreDefRole = SCOREDEF_NONE;
         m_isFirstMeasure = false;
         m_hasMultipleLayer = false;
+        m_doc = doc;
     }
     MeasureAligner *m_measureAligner;
     double m_time;
@@ -412,6 +458,7 @@ public:
     ElementScoreDefRole m_scoreDefRole;
     bool m_isFirstMeasure;
     bool m_hasMultipleLayer;
+    Doc *m_doc;
 };
 
 //----------------------------------------------------------------------------
@@ -582,6 +629,10 @@ public:
 /**
  * member 0: double: the current score time in the measure (incremented by each element)
  * member 1: double: the current real time in seconds in the measure (incremented by each element)
+ * member 2: the current Mensur
+ * member 3: the current MeterSig
+ * member 4: the current notation type
+ * member 5: the current tempo
  **/
 
 class CalcOnsetOffsetParams : public FunctorParams {
@@ -590,10 +641,16 @@ public:
     {
         m_currentScoreTime = 0.0;
         m_currentRealTimeSeconds = 0.0;
+        m_currentMensur = NULL;
+        m_currentMeterSig = NULL;
+        m_notationType = NOTATIONTYPE_cmn;
         m_currentTempo = 120;
     }
     double m_currentScoreTime;
     double m_currentRealTimeSeconds;
+    Mensur *m_currentMensur;
+    MeterSig *m_currentMeterSig;
+    data_NOTATIONTYPE m_notationType;
     int m_currentTempo;
 };
 
@@ -655,13 +712,11 @@ public:
         m_currentPage = currentPage;
         m_currentSystem = currentSystem;
         m_contentSystem = contentSystem;
-        m_firstPbProcessed = false;
     }
     Doc *m_doc;
     Page *m_currentPage;
     System *m_contentSystem;
     System *m_currentSystem;
-    bool m_firstPbProcessed;
 };
 
 //----------------------------------------------------------------------------
@@ -713,11 +768,12 @@ public:
  * member 4: the system width
  * member 5: the current scoreDef width
  * member 6: the current pending objects (ScoreDef, Endings, etc.) to be place at the beginning of a system
+ * member 7: the doc
  **/
 
 class CastOffSystemsParams : public FunctorParams {
 public:
-    CastOffSystemsParams(System *contentSystem, Page *page, System *currentSystem)
+    CastOffSystemsParams(System *contentSystem, Page *page, System *currentSystem, Doc *doc)
     {
         m_contentSystem = contentSystem;
         m_page = page;
@@ -725,6 +781,7 @@ public:
         m_shift = 0;
         m_systemWidth = 0;
         m_currentScoreDefWidth = 0;
+        m_doc = doc;
     }
     System *m_contentSystem;
     Page *m_page;
@@ -733,6 +790,7 @@ public:
     int m_systemWidth;
     int m_currentScoreDefWidth;
     ArrayOfObjects m_pendingObjects;
+    Doc *m_doc;
 };
 
 //----------------------------------------------------------------------------
@@ -872,21 +930,21 @@ public:
 
 class FindAllBetweenParams : public FunctorParams {
 public:
-    FindAllBetweenParams(AttComparison *attComparison, ArrayOfObjects *elements, Object *start, Object *end)
+    FindAllBetweenParams(Comparison *comparison, ArrayOfObjects *elements, Object *start, Object *end)
     {
-        m_attComparison = attComparison;
+        m_comparison = comparison;
         m_elements = elements;
         m_start = start;
         m_end = end;
     }
-    AttComparison *m_attComparison;
+    Comparison *m_comparison;
     ArrayOfObjects *m_elements;
     Object *m_start;
     Object *m_end;
 };
 
 //----------------------------------------------------------------------------
-// FindAllByAttComparisonParams
+// FindAllByComparisonParams
 //----------------------------------------------------------------------------
 
 /**
@@ -894,19 +952,19 @@ public:
  * member 1: an array of all matching objects
  **/
 
-class FindAllByAttComparisonParams : public FunctorParams {
+class FindAllByComparisonParams : public FunctorParams {
 public:
-    FindAllByAttComparisonParams(AttComparison *attComparison, ArrayOfObjects *elements)
+    FindAllByComparisonParams(Comparison *comparison, ArrayOfObjects *elements)
     {
-        m_attComparison = attComparison;
+        m_comparison = comparison;
         m_elements = elements;
     }
-    AttComparison *m_attComparison;
+    Comparison *m_comparison;
     ArrayOfObjects *m_elements;
 };
 
 //----------------------------------------------------------------------------
-// FindByAttComparisonParams
+// FindByComparisonParams
 //----------------------------------------------------------------------------
 
 /**
@@ -914,14 +972,14 @@ public:
  * member 1: the pointer to pointer to the Object
  **/
 
-class FindByAttComparisonParams : public FunctorParams {
+class FindByComparisonParams : public FunctorParams {
 public:
-    FindByAttComparisonParams(AttComparison *attComparison)
+    FindByComparisonParams(Comparison *comparison)
     {
-        m_attComparison = attComparison;
+        m_comparison = comparison;
         m_element = NULL;
     }
-    AttComparison *m_attComparison;
+    Comparison *m_comparison;
     Object *m_element;
 };
 
@@ -942,7 +1000,7 @@ public:
 };
 
 //----------------------------------------------------------------------------
-// FindExtremeByAttComparisonParams
+// FindExtremeByComparisonParams
 //----------------------------------------------------------------------------
 
 /**
@@ -950,14 +1008,14 @@ public:
  * member 1: the pointer to pointer to the Object
  **/
 
-class FindExtremeByAttComparisonParams : public FunctorParams {
+class FindExtremeByComparisonParams : public FunctorParams {
 public:
-    FindExtremeByAttComparisonParams(AttComparison *attComparison)
+    FindExtremeByComparisonParams(Comparison *comparison)
     {
-        m_attComparison = attComparison;
+        m_comparison = comparison;
         m_element = NULL;
     }
-    AttComparison *m_attComparison;
+    Comparison *m_comparison;
     Object *m_element;
 };
 
@@ -1032,15 +1090,17 @@ public:
 
 class GenerateMIDIParams : public FunctorParams {
 public:
-    GenerateMIDIParams(MidiFile *midiFile)
+    GenerateMIDIParams(smf::MidiFile *midiFile)
     {
         m_midiFile = midiFile;
+        m_midiChannel = 0;
         m_midiTrack = 1;
         m_totalTime = 0.0;
         m_transSemi = 0;
         m_currentTempo = 120;
     }
-    MidiFile *m_midiFile;
+    smf::MidiFile *m_midiFile;
+    int m_midiChannel;
     int m_midiTrack;
     double m_totalTime;
     int m_transSemi;
@@ -1132,6 +1192,40 @@ public:
 };
 
 //----------------------------------------------------------------------------
+// OptimizeScoreDefParams
+//----------------------------------------------------------------------------
+
+/**
+ * member 0: the current scoreDef
+ * member 1: the current staffDef
+ * member 2: the flag indicating if we are optimizing encoded layout
+ * member 3: the doc
+ **/
+
+class OptimizeScoreDefParams : public FunctorParams {
+public:
+    OptimizeScoreDefParams(Doc *doc, Functor *functor, Functor *functorEnd)
+    {
+        m_currentScoreDef = NULL;
+        m_encoded = false;
+        m_firstScoreDef = true;
+        m_hasFermata = false;
+        m_hasTempo = false;
+        m_doc = doc;
+        m_functor = functor;
+        m_functorEnd = functorEnd;
+    }
+    ScoreDef *m_currentScoreDef;
+    bool m_encoded;
+    bool m_firstScoreDef;
+    bool m_hasFermata;
+    bool m_hasTempo;
+    Doc *m_doc;
+    Functor *m_functor;
+    Functor *m_functorEnd;
+};
+
+//----------------------------------------------------------------------------
 // PrepareBoundariesParams
 //----------------------------------------------------------------------------
 
@@ -1217,6 +1311,23 @@ public:
 };
 
 //----------------------------------------------------------------------------
+// PrepareLinkingParams
+//----------------------------------------------------------------------------
+
+/**
+ * member 0: ArrayOfInterfaceUuidPairs holds the interface / uuid pairs to match
+ * member 1: bool* fillList for indicating whether the pairs have to be stacked or not
+ **/
+
+class PrepareLinkingParams : public FunctorParams {
+public:
+    PrepareLinkingParams() { m_fillList = true; }
+    ArrayOfLinkingInterfaceUuidPairs m_nextUuidPairs;
+    ArrayOfLinkingInterfaceUuidPairs m_sameasUuidPairs;
+    bool m_fillList;
+};
+
+//----------------------------------------------------------------------------
 // PreparePlistParams
 //----------------------------------------------------------------------------
 
@@ -1228,7 +1339,7 @@ public:
 class PreparePlistParams : public FunctorParams {
 public:
     PreparePlistParams() { m_fillList = true; }
-    ArrayOfInterfaceUuidPairs m_interfaceUuidPairs;
+    ArrayOfPlistInterfaceUuidPairs m_interfaceUuidPairs;
     bool m_fillList;
 };
 
@@ -1238,12 +1349,18 @@ public:
 
 /**
  * member 0: the current Note
+ * member 1: the last Dot
  **/
 
 class PreparePointersByLayerParams : public FunctorParams {
 public:
-    PreparePointersByLayerParams() { m_currentNote = NULL; }
+    PreparePointersByLayerParams()
+    {
+        m_currentNote = NULL;
+        m_lastDot = NULL;
+    }
     Note *m_currentNote;
+    Dot *m_lastDot;
 };
 
 //----------------------------------------------------------------------------

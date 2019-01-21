@@ -9,6 +9,7 @@
 
 //----------------------------------------------------------------------------
 
+#include <algorithm>
 #include <assert.h>
 #include <math.h>
 
@@ -170,7 +171,7 @@ void Measure::AddChildBack(Object *child)
         m_children.push_back(child);
     }
     else {
-        for (auto it = m_children.begin(); it != m_children.end(); it++) {
+        for (auto it = m_children.begin(); it != m_children.end(); ++it) {
             if (!(*it)->Is(STAFF)) {
                 m_children.insert(it, child);
                 break;
@@ -182,6 +183,14 @@ void Measure::AddChildBack(Object *child)
 
 int Measure::GetDrawingX() const
 {
+    if (!this->IsMeasuredMusic()) {
+        System *system = dynamic_cast<System *>(this->GetFirstParent(SYSTEM));
+        assert(system);
+        if (system->m_yAbs != VRV_UNSET) {
+            return (system->m_systemLeftMar);
+        }
+    }
+
     if (m_xAbs != VRV_UNSET) return m_xAbs;
 
     if (m_cachedDrawingX != VRV_UNSET) return m_cachedDrawingX;
@@ -195,6 +204,7 @@ int Measure::GetDrawingX() const
 void Measure::SetDrawingXRel(int drawingXRel)
 {
     ResetCachedDrawingX();
+    m_timestampAligner.ResetCachedDrawingX();
     m_drawingXRel = drawingXRel;
 }
 
@@ -252,6 +262,17 @@ int Measure::GetRightBarLineRight() const
 
 int Measure::GetWidth() const
 {
+    if (!this->IsMeasuredMusic()) {
+        System *system = dynamic_cast<System *>(this->GetFirstParent(SYSTEM));
+        assert(system);
+        Page *page = dynamic_cast<Page *>(system->GetFirstParent(PAGE));
+        assert(page);
+        if (system->m_yAbs != VRV_UNSET) {
+            // xAbs2 =  page->m_pageWidth - system->m_systemRightMar;
+            return page->m_pageWidth - system->m_systemLeftMar - system->m_systemRightMar;
+        }
+    }
+
     if (this->m_xAbs2 != VRV_UNSET) return (m_xAbs2 - m_xAbs);
 
     assert(m_measureAligner.GetRightAlignment());
@@ -266,6 +287,22 @@ int Measure::GetInnerWidth() const
 int Measure::GetInnerCenterX() const
 {
     return (this->GetDrawingX() + this->GetLeftBarLineRight() + this->GetInnerWidth() / 2);
+}
+
+int Measure::GetDrawingOverflow()
+{
+    Functor adjustXOverlfow(&Object::AdjustXOverflow);
+    Functor adjustXOverlfowEnd(&Object::AdjustXOverflowEnd);
+    AdjustXOverflowParams adjustXOverflowParams(0);
+    adjustXOverflowParams.m_currentSystem = dynamic_cast<System *>(this->GetFirstParent(SYSTEM));
+    assert(adjustXOverflowParams.m_currentSystem);
+    adjustXOverflowParams.m_lastMeasure = this;
+    this->Process(&adjustXOverlfow, &adjustXOverflowParams, &adjustXOverlfowEnd);
+    if (!adjustXOverflowParams.m_currentWidest) return 0;
+
+    int measureRightX = this->GetDrawingX() + this->GetWidth();
+    int overflow = adjustXOverflowParams.m_currentWidest->GetContentRight() - measureRightX;
+    return std::max(0, overflow);
 }
 
 void Measure::SetDrawingScoreDef(ScoreDef *drawingScoreDef)
@@ -288,18 +325,18 @@ std::vector<Staff *> Measure::GetFirstStaffGrpStaves(ScoreDef *scoreDef)
     AttComparison matchType(STAFFGRP);
     ArrayOfObjects staffGrps;
     ArrayOfObjects::iterator staffGrpIter;
-    scoreDef->FindAllChildByAttComparison(&staffGrps, &matchType);
+    scoreDef->FindAllChildByComparison(&staffGrps, &matchType);
 
     // Then the @n of each first staffDef
-    for (staffGrpIter = staffGrps.begin(); staffGrpIter != staffGrps.end(); staffGrpIter++) {
+    for (staffGrpIter = staffGrps.begin(); staffGrpIter != staffGrps.end(); ++staffGrpIter) {
         StaffDef *staffDef = dynamic_cast<StaffDef *>((*staffGrpIter)->GetFirst(STAFFDEF));
         if (staffDef) staffList.push_back(staffDef->GetN());
     }
 
     // Get the corresponding staves in the measure
-    for (iter = staffList.begin(); iter != staffList.end(); iter++) {
+    for (iter = staffList.begin(); iter != staffList.end(); ++iter) {
         AttNIntegerComparison matchN(STAFF, *iter);
-        Staff *staff = dynamic_cast<Staff *>(this->FindChildByAttComparison(&matchN, 1));
+        Staff *staff = dynamic_cast<Staff *>(this->FindChildByComparison(&matchN, 1));
         if (!staff) {
             // LogDebug("Staff with @n '%d' not found in measure '%s'", *iter, measure->GetUuid().c_str());
             continue;
@@ -316,7 +353,7 @@ int Measure::EnclosesTime(int time) const
     int timeDuration = int(
         m_measureAligner.GetRightAlignment()->GetTime() * DURATION_4 / DUR_MAX * 60.0 / m_currentTempo * 1000.0 + 0.5);
     std::vector<int>::const_iterator iter;
-    for (iter = m_realTimeOffsetMilliseconds.begin(); iter != m_realTimeOffsetMilliseconds.end(); iter++) {
+    for (iter = m_realTimeOffsetMilliseconds.begin(); iter != m_realTimeOffsetMilliseconds.end(); ++iter) {
         if ((time >= *iter) && (time <= *iter + timeDuration)) return repeat;
         repeat++;
     }
@@ -393,7 +430,7 @@ int Measure::ConvertAnalyticalMarkupEnd(FunctorParams *functorParams)
     assert(params);
 
     ArrayOfObjects::iterator iter;
-    for (iter = params->m_controlEvents.begin(); iter != params->m_controlEvents.end(); iter++) {
+    for (iter = params->m_controlEvents.begin(); iter != params->m_controlEvents.end(); ++iter) {
         this->AddChild(*iter);
     }
 
@@ -440,7 +477,7 @@ int Measure::ConvertToCastOffMensural(FunctorParams *functorParams)
     }
     params->m_targetSubSystem->AddChild(measure);
 
-    std::vector<AttComparison *> filters;
+    ArrayOfComparisons filters;
     // Now we can process by layer and move their content to (measure) segments
     for (auto const &staves : params->m_layerTree->child) {
         for (auto const &layers : staves.second.child) {
@@ -507,6 +544,17 @@ int Measure::UnsetCurrentScoreDef(FunctorParams *functorParams)
     return FUNCTOR_CONTINUE;
 }
 
+int Measure::OptimizeScoreDef(FunctorParams *functorParams)
+{
+    OptimizeScoreDefParams *params = dynamic_cast<OptimizeScoreDefParams *>(functorParams);
+    assert(params);
+
+    params->m_hasFermata = (this->FindChildByType(FERMATA));
+    params->m_hasTempo = (this->FindChildByType(TEMPO));
+
+    return FUNCTOR_CONTINUE;
+}
+
 int Measure::ResetHorizontalAlignment(FunctorParams *functorParams)
 {
     SetDrawingXRel(0);
@@ -563,8 +611,7 @@ int Measure::AlignHorizontallyEnd(FunctorParams *functorParams)
 
     // We also need to align the timestamps - we do it at the end since we need the *meterSig to be initialized by a
     // Layer. Obviously this will not work with different time signature. However, I am not sure how this would work
-    // in
-    // MEI anyway.
+    // in MEI anyway.
     m_timestampAligner.Process(params->m_functor, params);
 
     // Next scoreDef will be INTERMEDIATE_SCOREDEF (See Layer::AlignHorizontally)
@@ -608,8 +655,8 @@ int Measure::AdjustLayers(FunctorParams *functorParams)
     if (!m_hasAlignmentRefWithMultipleLayers) return FUNCTOR_SIBLINGS;
 
     std::vector<int>::iterator iter;
-    std::vector<AttComparison *> filters;
-    for (iter = params->m_staffNs.begin(); iter != params->m_staffNs.end(); iter++) {
+    ArrayOfComparisons filters;
+    for (iter = params->m_staffNs.begin(); iter != params->m_staffNs.end(); ++iter) {
         filters.clear();
         // Create ad comparison object for each type / @n
         std::vector<int> ns;
@@ -643,11 +690,25 @@ int Measure::AdjustGraceXPos(FunctorParams *functorParams)
     assert(params);
 
     m_measureAligner.PushAlignmentsRight();
-
     params->m_rightDefaultAlignment = NULL;
 
     // We process it backward because we want to get the rightDefaultAlignment
     m_measureAligner.Process(params->m_functor, params, params->m_functorEnd, NULL, UNLIMITED_DEPTH, BACKWARD);
+
+    // We need to process the staves in the reverse order
+    std::vector<int> staffNs = params->m_staffNs;
+    std::vector<int> staffNsReversed;
+    staffNsReversed.resize(staffNs.size());
+    std::reverse_copy(staffNs.begin(), staffNs.end(), staffNsReversed.begin());
+
+    m_measureAligner.PushAlignmentsRight();
+    params->m_rightDefaultAlignment = NULL;
+
+    params->m_staffNs = staffNsReversed;
+    m_measureAligner.Process(params->m_functor, params, params->m_functorEnd, NULL, UNLIMITED_DEPTH, BACKWARD);
+
+    // Put params back
+    params->m_staffNs = staffNs;
 
     return FUNCTOR_SIBLINGS;
 }
@@ -662,8 +723,8 @@ int Measure::AdjustXPos(FunctorParams *functorParams)
     params->m_cumulatedXShift = 0;
 
     std::vector<int>::iterator iter;
-    std::vector<AttComparison *> filters;
-    for (iter = params->m_staffNs.begin(); iter != params->m_staffNs.end(); iter++) {
+    ArrayOfComparisons filters;
+    for (iter = params->m_staffNs.begin(); iter != params->m_staffNs.end(); ++iter) {
         params->m_minPos = 0;
         params->m_upcomingMinPos = VRV_UNSET;
         params->m_cumulatedXShift = 0;
@@ -687,7 +748,7 @@ int Measure::AdjustXPos(FunctorParams *functorParams)
     // First try to see if we have a double measure length element
     MeasureAlignerTypeComparison alignmentComparison(ALIGNMENT_FULLMEASURE2);
     Alignment *fullMeasure2
-        = dynamic_cast<Alignment *>(m_measureAligner.FindChildByAttComparison(&alignmentComparison, 1));
+        = dynamic_cast<Alignment *>(m_measureAligner.FindChildByComparison(&alignmentComparison, 1));
 
     // With a double measure with element (mRpt2, multiRpt)
     if (fullMeasure2 != NULL) {
@@ -714,19 +775,28 @@ int Measure::AdjustSylSpacingEnd(FunctorParams *functorParams)
 {
     AdjustSylSpacingParams *params = dynamic_cast<AdjustSylSpacingParams *>(functorParams);
     assert(params);
-
-    // Here we also need to handle the last syl or the measure - we check the alignment with the right barline
-    if (params->m_previousSyl) {
-        int overlap = params->m_previousSyl->GetContentRight() - this->GetRightBarLine()->GetAlignment()->GetXRel();
-        if (overlap > 0) {
-            params->m_overlapingSyl.push_back(std::make_tuple(
-                params->m_previousSyl->GetAlignment(), this->GetRightBarLine()->GetAlignment(), overlap));
-        }
-    }
+    
+    // At the end of the measure - pass it along for overlapping verses
+    params->m_previousMeasure = this;
 
     // Ajust the postion of the alignment according to what we have collected for this verse
     m_measureAligner.AdjustProportionally(params->m_overlapingSyl);
     params->m_overlapingSyl.clear();
+
+    return FUNCTOR_CONTINUE;
+}
+
+int Measure::AdjustXOverflow(FunctorParams *functorParams)
+{
+    AdjustXOverflowParams *params = dynamic_cast<AdjustXOverflowParams *>(functorParams);
+    assert(params);
+
+    params->m_lastMeasure = this;
+    // For now look only at the content of the last measure, so discard any previous control event.
+    // We need to do this because AdjustXOverflow is run before measures are aligned, so the right
+    // position comparison do not actually tell us which one is the longest. This is not optimal
+    // and can be improved.
+    params->m_currentWidest = NULL;
 
     return FUNCTOR_CONTINUE;
 }
@@ -773,8 +843,6 @@ int Measure::AlignMeasures(FunctorParams *functorParams)
 
 int Measure::ResetDrawing(FunctorParams *functorParams)
 {
-    this->m_leftBarLine.Reset();
-    this->m_rightBarLine.Reset();
     this->m_timestampAligner.Reset();
     m_drawingEnding = NULL;
     return FUNCTOR_CONTINUE;
@@ -785,25 +853,36 @@ int Measure::CastOffSystems(FunctorParams *functorParams)
     CastOffSystemsParams *params = dynamic_cast<CastOffSystemsParams *>(functorParams);
     assert(params);
 
-    if ((params->m_currentSystem->GetChildCount() > 0)
-        && (this->m_drawingXRel + this->GetWidth() + params->m_currentScoreDefWidth - params->m_shift
-               > params->m_systemWidth)) {
-        params->m_currentSystem = new System();
-        params->m_page->AddChild(params->m_currentSystem);
-        params->m_shift = this->m_drawingXRel;
+    // Check if the measure has some overlfowing control elements
+    int overflow = this->GetDrawingOverflow();
+
+    if (params->m_currentSystem->GetChildCount() > 0) {
+        // We have overflowing content (dir, dynam, tempo) larger than 5 units, keep it as pending
+        if (overflow > (params->m_doc->GetDrawingUnit(100) * 5)) {
+            Measure *measure = dynamic_cast<Measure *>(params->m_contentSystem->Relinquish(this->GetIdx()));
+            assert(measure);
+            // move as pending since we want it not to be broken with the next measure
+            params->m_pendingObjects.push_back(measure);
+            // continue
+            return FUNCTOR_SIBLINGS;
+        }
+        // Break it if necessary
+        else if (this->m_drawingXRel + this->GetWidth() + params->m_currentScoreDefWidth - params->m_shift
+            > params->m_systemWidth) {
+            params->m_currentSystem = new System();
+            params->m_page->AddChild(params->m_currentSystem);
+            params->m_shift = this->m_drawingXRel;
+        }
     }
 
     // First add all pendings objects
     ArrayOfObjects::iterator iter;
-    for (iter = params->m_pendingObjects.begin(); iter != params->m_pendingObjects.end(); iter++) {
+    for (iter = params->m_pendingObjects.begin(); iter != params->m_pendingObjects.end(); ++iter) {
         params->m_currentSystem->AddChild(*iter);
     }
     params->m_pendingObjects.clear();
 
     // Special case where we use the Relinquish method.
-    // We want to move the measure to the currentSystem. However, we cannot use DetachChild
-    // from the content System because this screws up the iterator. Relinquish gives up
-    // the ownership of the Measure - the contentSystem will be deleted afterwards.
     Measure *measure = dynamic_cast<Measure *>(params->m_contentSystem->Relinquish(this->GetIdx()));
     assert(measure);
     params->m_currentSystem->AddChild(measure);
@@ -828,16 +907,31 @@ int Measure::FillStaffCurrentTimeSpanningEnd(FunctorParams *functorParams)
 
     std::vector<Object *>::iterator iter = params->m_timeSpanningElements.begin();
     while (iter != params->m_timeSpanningElements.end()) {
-        TimeSpanningInterface *interface = (*iter)->GetTimeSpanningInterface();
-        assert(interface);
-        Measure *endParent = dynamic_cast<Measure *>(interface->GetEnd()->GetFirstParent(MEASURE));
+        Measure *endParent = NULL;
+        if ((*iter)->HasInterface(INTERFACE_TIME_SPANNING)) {
+            TimeSpanningInterface *interface = (*iter)->GetTimeSpanningInterface();
+            assert(interface);
+            if (interface->GetEnd()) {
+                endParent = dynamic_cast<Measure *>(interface->GetEnd()->GetFirstParent(MEASURE));
+            }
+        }
+        if (!endParent && (*iter)->HasInterface(INTERFACE_LINKING)) {
+            LinkingInterface *interface = (*iter)->GetLinkingInterface();
+            assert(interface);
+            if (interface->GetNextLink()) {
+                // We should have one because we allow only control Event (dir and dynam) to be linked as target
+                TimePointInterface *nextInterface = interface->GetNextLink()->GetTimePointInterface();
+                assert(nextInterface);
+                endParent = dynamic_cast<Measure *>(nextInterface->GetStart()->GetFirstParent(MEASURE));
+            }
+        }
         assert(endParent);
         // We have reached the end of the spanning - remove it from the list of running elements
         if (endParent == this) {
             iter = params->m_timeSpanningElements.erase(iter);
         }
         else {
-            iter++;
+            ++iter;
         }
     }
     return FUNCTOR_CONTINUE;
@@ -849,7 +943,7 @@ int Measure::PrepareBoundaries(FunctorParams *functorParams)
     assert(params);
 
     std::vector<BoundaryStartInterface *>::iterator iter;
-    for (iter = params->m_startBoundaries.begin(); iter != params->m_startBoundaries.end(); iter++) {
+    for (iter = params->m_startBoundaries.begin(); iter != params->m_startBoundaries.end(); ++iter) {
         (*iter)->SetMeasure(this);
     }
     params->m_startBoundaries.clear();
@@ -903,7 +997,7 @@ int Measure::PrepareFloatingGrpsEnd(FunctorParams *functorParams)
             iter = params->m_hairpins.erase(iter);
         }
         else {
-            iter++;
+            ++iter;
         }
     }
 
@@ -935,16 +1029,14 @@ int Measure::PrepareTimeSpanningEnd(FunctorParams *functorParams)
 
     ArrayOfSpanningInterClassIdPairs::iterator iter = params->m_timeSpanningInterfaces.begin();
     while (iter != params->m_timeSpanningInterfaces.end()) {
-        // At the end of the measure (going backward) we remove element for which we do not need to match the end
-        // (for
-        // now). Eventually, we could consider them, for example if we want to display their spanning or for
-        // improved
+        // At the end of the measure (going backward) we remove element for which we do not need to match the end (for
+        // now). Eventually, we could consider them, for example if we want to display their spanning or for improved
         // midi output
         if ((iter->second == DIR) || (iter->second == DYNAM) || (iter->second == HARM)) {
             iter = params->m_timeSpanningInterfaces.erase(iter);
         }
         else {
-            iter++;
+            ++iter;
         }
     }
 
@@ -1007,7 +1099,7 @@ int Measure::PrepareTimestampsEnd(FunctorParams *functorParams)
         // we have not reached the correct end measure yet
         else {
             (*iter).second.first--;
-            iter++;
+            ++iter;
         }
     }
 
@@ -1056,6 +1148,17 @@ int Measure::CalcMaxMeasureDuration(FunctorParams *functorParams)
     Tempo *tempo = dynamic_cast<Tempo *>(this->FindChildByType(TEMPO));
     if (tempo && tempo->HasMidiBpm()) {
         params->m_currentTempo = tempo->GetMidiBpm();
+    }
+    else if (tempo && tempo->HasMm()) {
+        int mm = tempo->GetMm();
+        int mmUnit = 4;
+        if (tempo->HasMmUnit() && (tempo->GetMmUnit() > DURATION_breve)) {
+            mmUnit = pow(2, (int)tempo->GetMmUnit() - 2);
+        }
+        if (tempo->HasMmDots()) {
+            mmUnit = 2 * mmUnit - (mmUnit / pow(2, tempo->GetMmDots()));
+        }
+        params->m_currentTempo = int(mm * 4.0 / mmUnit + 0.5);
     }
     m_currentTempo = params->m_currentTempo;
 

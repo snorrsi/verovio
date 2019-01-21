@@ -20,10 +20,13 @@ class TextElement;
 // MNum
 //----------------------------------------------------------------------------
 
+/**
+ * This class models the MEI <mNum> element.
+ */
 class MNum : public ControlElement,
              public TextListInterface,
              public TextDirInterface,
-             public TimeSpanningInterface,
+             public TimePointInterface,
              public AttColor,
              public AttLang,
              public AttTypography {
@@ -46,7 +49,6 @@ public:
     ///@{
     virtual TextDirInterface *GetTextDirInterface() { return dynamic_cast<TextDirInterface *>(this); }
     virtual TimePointInterface *GetTimePointInterface() { return dynamic_cast<TimePointInterface *>(this); }
-    virtual TimeSpanningInterface *GetTimeSpanningInterface() { return dynamic_cast<TimeSpanningInterface *>(this); }
     ///@}
 
     /**
@@ -75,15 +77,9 @@ public:
     virtual int SaveEnd(FunctorParams *functorParams);
     ///@}
 
-protected:
-    //
-private:
-    //
-public:
-    //
 private:
     /**
-     * Flag indicating whereas if the element was generated or not
+     * Flag indicating whether or not the element was generated
      */
     bool m_isGenerated;
 };

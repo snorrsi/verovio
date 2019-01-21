@@ -16,9 +16,11 @@
 
 #include "attcomparison.h"
 #include "barline.h"
+#include "beatrpt.h"
 #include "chord.h"
 #include "functorparams.h"
 #include "glyph.h"
+#include "instrdef.h"
 #include "keysig.h"
 #include "label.h"
 #include "layer.h"
@@ -28,7 +30,10 @@
 #include "metersig.h"
 #include "mnum.h"
 #include "mrest.h"
+#include "mrpt.h"
+#include "mrpt2.h"
 #include "multirest.h"
+#include "multirpt.h"
 #include "note.h"
 #include "page.h"
 #include "pages.h"
@@ -36,7 +41,6 @@
 #include "pgfoot2.h"
 #include "pghead.h"
 #include "pghead2.h"
-#include "rpt.h"
 #include "runningelement.h"
 #include "score.h"
 #include "slur.h"
@@ -47,6 +51,7 @@
 #include "syl.h"
 #include "system.h"
 #include "text.h"
+#include "timestamp.h"
 #include "verse.h"
 #include "vrv.h"
 
@@ -95,6 +100,10 @@ void Doc::Reset()
 
     m_drawingSmuflFontSize = 0;
     m_drawingLyricFontSize = 0;
+    
+    m_header.reset();
+    m_front.reset();
+    m_back.reset();
 }
 
 void Doc::SetType(DocType type)
@@ -132,7 +141,7 @@ bool Doc::GenerateDocumentScoreDef()
 
     ArrayOfObjects staves;
     AttComparison matchType(STAFF);
-    measure->FindAllChildByAttComparison(&staves, &matchType);
+    measure->FindAllChildByComparison(&staves, &matchType);
 
     if (staves.empty()) {
         LogError("No staff found for generating a scoreDef");
@@ -142,7 +151,7 @@ bool Doc::GenerateDocumentScoreDef()
     m_scoreDef.Reset();
     StaffGrp *staffGrp = new StaffGrp();
     ArrayOfObjects::iterator iter;
-    for (iter = staves.begin(); iter != staves.end(); iter++) {
+    for (iter = staves.begin(); iter != staves.end(); ++iter) {
         Staff *staff = dynamic_cast<Staff *>(*iter);
         assert(staff);
         StaffDef *staffDef = new StaffDef();
@@ -199,10 +208,10 @@ bool Doc::GenerateMeasureNumbers()
     AttComparison matchType(MEASURE);
     ArrayOfObjects measures;
     ArrayOfObjects::iterator measureIter;
-    this->FindAllChildByAttComparison(&measures, &matchType);
+    this->FindAllChildByComparison(&measures, &matchType);
 
     // run through all measures and generate missing mNum from attribute
-    for (measureIter = measures.begin(); measureIter != measures.end(); measureIter++) {
+    for (measureIter = measures.begin(); measureIter != measures.end(); ++measureIter) {
         Measure *measure = dynamic_cast<Measure *>(*measureIter);
         if (measure->HasN() && !measure->FindChildByType(MNUM)) {
             MNum *mnum = new MNum;
@@ -233,7 +242,7 @@ void Doc::CalculateMidiTimemap()
         if (!page) {
             return;
         }
-        this->CollectScoreDefs();
+        this->SetCurrentScoreDefDoc();
         page->LayOutHorizontally();
     }
 
@@ -263,7 +272,7 @@ void Doc::CalculateMidiTimemap()
     m_hasMidiTimemap = true;
 }
 
-void Doc::ExportMIDI(MidiFile *midiFile)
+void Doc::ExportMIDI(smf::MidiFile *midiFile)
 {
 
     if (!Doc::HasMidiTimemap()) {
@@ -276,7 +285,7 @@ void Doc::ExportMIDI(MidiFile *midiFile)
 
     int tempo = 120;
 
-    // Set tempo
+    // set MIDI tempo
     if (m_scoreDef.HasMidiBpm()) {
         tempo = m_scoreDef.GetMidiBpm();
     }
@@ -301,17 +310,35 @@ void Doc::ExportMIDI(MidiFile *midiFile)
 
     // Process notes and chords, rests, spaces layer by layer
     // track 0 (included by default) is reserved for meta messages common to all tracks
+    int midiChannel = 0;
     int midiTrack = 1;
-    std::vector<AttComparison *> filters;
+    ArrayOfComparisons filters;
     for (staves = prepareProcessingListsParams.m_layerTree.child.begin();
          staves != prepareProcessingListsParams.m_layerTree.child.end(); ++staves) {
 
         int transSemi = 0;
-        // Get the transposition (semi-tone) value for the staff
         if (StaffDef *staffDef = this->m_scoreDef.GetStaffDef(staves->first)) {
+            // get the transposition (semi-tone) value for the staff
             if (staffDef->HasTransSemi()) transSemi = staffDef->GetTransSemi();
             midiTrack = staffDef->GetN();
-            midiFile->addTrack();
+            int trackCount = midiFile->getTrackCount();
+            int addCount = midiTrack + 1 - trackCount;
+            if (addCount > 0) {
+                midiFile->addTracks(addCount);
+            }
+            // set MIDI channel and instrument
+            InstrDef *instrdef = dynamic_cast<InstrDef *>(staffDef->FindChildByType(INSTRDEF, 1));
+            if (!instrdef) {
+                StaffGrp *staffGrp = dynamic_cast<StaffGrp *>(staffDef->GetFirstParent(STAFFGRP));
+                assert(staffGrp);
+                instrdef = dynamic_cast<InstrDef *>(staffGrp->FindChildByType(INSTRDEF, 1));
+            }
+            if (instrdef) {
+                if (instrdef->HasMidiChannel()) midiChannel = instrdef->GetMidiChannel();
+                if (instrdef->HasMidiInstrnum())
+                    midiFile->addPatchChange(midiTrack, 0, midiChannel, instrdef->GetMidiInstrnum());
+            }
+            // set MIDI track name
             Label *label = dynamic_cast<Label *>(staffDef->FindChildByType(LABEL, 1));
             if (!label) {
                 StaffGrp *staffGrp = dynamic_cast<StaffGrp *>(staffDef->GetFirstParent(STAFFGRP));
@@ -321,6 +348,11 @@ void Doc::ExportMIDI(MidiFile *midiFile)
             if (label) {
                 std::string trackName = UTF16to8(label->GetText(label)).c_str();
                 if (!trackName.empty()) midiFile->addTrackName(midiTrack, 0, trackName);
+            }
+            // set MIDI time signature
+            if (this->m_scoreDef.HasMeterCount()) {
+                midiFile->addTimeSignature(
+                    midiTrack, 0, this->m_scoreDef.GetMeterCount(), this->m_scoreDef.GetMeterUnit());
             }
         }
 
@@ -333,6 +365,7 @@ void Doc::ExportMIDI(MidiFile *midiFile)
             filters.push_back(&matchLayer);
 
             GenerateMIDIParams generateMIDIParams(midiFile);
+            generateMIDIParams.m_midiChannel = midiChannel;
             generateMIDIParams.m_midiTrack = midiTrack;
             generateMIDIParams.m_transSemi = transSemi;
             generateMIDIParams.m_currentTempo = tempo;
@@ -344,7 +377,7 @@ void Doc::ExportMIDI(MidiFile *midiFile)
     }
 }
 
-bool Doc::ExportTimemap(string &output)
+bool Doc::ExportTimemap(std::string &output)
 {
     if (!Doc::HasMidiTimemap()) {
         // generate MIDI timemap before progressing
@@ -366,8 +399,8 @@ bool Doc::ExportTimemap(string &output)
 }
 
 void Doc::PrepareJsonTimemap(std::string &output, std::map<int, double> &realTimeToScoreTime,
-    std::map<int, vector<string> > &realTimeToOnElements, std::map<int, vector<string> > &realTimeToOffElements,
-    std::map<int, int> &realTimeToTempo)
+    std::map<int, std::vector<std::string> > &realTimeToOnElements,
+    std::map<int, std::vector<std::string> > &realTimeToOffElements, std::map<int, int> &realTimeToTempo)
 {
 
     int currentTempo = -1000;
@@ -378,13 +411,13 @@ void Doc::PrepareJsonTimemap(std::string &output, std::map<int, double> &realTim
     output += "[\n";
     auto lastit = realTimeToScoreTime.end();
     lastit--;
-    for (auto it = realTimeToScoreTime.begin(); it != realTimeToScoreTime.end(); it++) {
+    for (auto it = realTimeToScoreTime.begin(); it != realTimeToScoreTime.end(); ++it) {
         output += "\t{\n";
         output += "\t\t\"tstamp\":\t";
-        output += to_string(it->first);
+        output += std::to_string(it->first);
         output += ",\n";
         output += "\t\t\"qstamp\":\t";
-        output += to_string(it->second);
+        output += std::to_string(it->second);
 
         auto ittempo = realTimeToTempo.find(it->first);
         if (ittempo != realTimeToTempo.end()) {
@@ -392,14 +425,14 @@ void Doc::PrepareJsonTimemap(std::string &output, std::map<int, double> &realTim
             if (newTempo != currentTempo) {
                 currentTempo = newTempo;
                 output += ",\n\t\t\"tempo\":\t";
-                output += to_string(currentTempo);
+                output += std::to_string(currentTempo);
             }
         }
 
         auto iton = realTimeToOnElements.find(it->first);
         if (iton != realTimeToOnElements.end()) {
             output += ",\n\t\t\"on\":\t[";
-            for (int ion = 0; ion < (int)iton->second.size(); ion++) {
+            for (int ion = 0; ion < (int)iton->second.size(); ++ion) {
                 output += "\"";
                 output += iton->second[ion];
                 output += "\"";
@@ -413,7 +446,7 @@ void Doc::PrepareJsonTimemap(std::string &output, std::map<int, double> &realTim
         auto itoff = realTimeToOffElements.find(it->first);
         if (itoff != realTimeToOffElements.end()) {
             output += ",\n\t\t\"off\":\t[";
-            for (int ioff = 0; ioff < (int)itoff->second.size(); ioff++) {
+            for (int ioff = 0; ioff < (int)itoff->second.size(); ++ioff) {
                 output += "\"";
                 output += itoff->second[ioff];
                 output += "\"";
@@ -474,7 +507,6 @@ void Doc::PrepareDrawing()
 
     // Now try to match the @tstamp and @tstamp2 attributes.
     PrepareTimestampsParams prepareTimestampsParams;
-    prepareTimestampsParams.m_timeSpanningInterfaces = prepareTimeSpanningParams.m_timeSpanningInterfaces;
     Functor prepareTimestamps(&Object::PrepareTimestamps);
     Functor prepareTimestampsEnd(&Object::PrepareTimestampsEnd);
     this->Process(&prepareTimestamps, &prepareTimestampsParams, &prepareTimestampsEnd);
@@ -483,6 +515,27 @@ void Doc::PrepareDrawing()
     if (!prepareTimestampsParams.m_timeSpanningInterfaces.empty()) {
         LogWarning("%d time spanning element(s) could not be matched",
             prepareTimestampsParams.m_timeSpanningInterfaces.size());
+    }
+
+    /************ Resolve linking (@next) ************/
+
+    // Try to match all pointing elements using @next and @sameas
+    PrepareLinkingParams prepareLinkingParams;
+    Functor prepareLinking(&Object::PrepareLinking);
+    this->Process(&prepareLinking, &prepareLinkingParams);
+
+    // If we have some left process again backward
+    if (!prepareLinkingParams.m_sameasUuidPairs.empty()) {
+        prepareLinkingParams.m_fillList = false;
+        this->Process(&prepareLinking, &prepareLinkingParams, NULL, NULL, UNLIMITED_DEPTH, BACKWARD);
+    }
+
+    // If some are still there, then it is probably an issue in the encoding
+    if (!prepareLinkingParams.m_nextUuidPairs.empty()) {
+        LogWarning("%d element(s) with a @next could match the target", prepareLinkingParams.m_nextUuidPairs.size());
+    }
+    if (!prepareLinkingParams.m_sameasUuidPairs.empty()) {
+        LogWarning("%d element(s) with a @sameas could match the target", prepareLinkingParams.m_sameasUuidPairs.size());
     }
 
     /************ Resolve @plist ************/
@@ -536,7 +589,7 @@ void Doc::PrepareDrawing()
 
     /************ Resolve some pointers by layer ************/
 
-    std::vector<AttComparison *> filters;
+    ArrayOfComparisons filters;
     for (staves = prepareProcessingListsParams.m_layerTree.child.begin();
          staves != prepareProcessingListsParams.m_layerTree.child.end(); ++staves) {
         for (layers = staves->second.child.begin(); layers != staves->second.child.end(); ++layers) {
@@ -673,7 +726,7 @@ void Doc::PrepareDrawing()
     m_drawingPreparationDone = true;
 }
 
-void Doc::CollectScoreDefs(bool force)
+void Doc::SetCurrentScoreDefDoc(bool force)
 {
     if (m_currentScoreDefDone && !force) {
         return;
@@ -692,11 +745,22 @@ void Doc::CollectScoreDefs(bool force)
     // the appropriate drawing values
     upcomingScoreDef.Process(&setCurrentScoreDef, &setCurrentScoreDefParams);
 
-    // LogElapsedTimeStart();
     this->Process(&setCurrentScoreDef, &setCurrentScoreDefParams);
-    // LogElapsedTimeEnd ("Setting scoreDefs");
 
     m_currentScoreDefDone = true;
+}
+
+void Doc::OptimizeScoreDefDoc(bool encoded)
+{
+    if (encoded) {
+        return;
+    }
+
+    Functor optimizeScoreDef(&Object::OptimizeScoreDef);
+    Functor optimizeScoreDefEnd(&Object::OptimizeScoreDefEnd);
+    OptimizeScoreDefParams optimizeScoreDefParams(this, &optimizeScoreDef, &optimizeScoreDefEnd);
+
+    this->Process(&optimizeScoreDef, &optimizeScoreDefParams, &optimizeScoreDefEnd);
 }
 
 void Doc::CastOffDoc()
@@ -709,7 +773,14 @@ void Doc::CastOffDoc()
         return;
     }
 
-    this->CollectScoreDefs();
+    // By default, optimize scores
+    bool optimize = (m_scoreDef.GetOptimize() != BOOLEAN_false);
+    // However, if nothing specified, do not if there is only one staffGrp
+    if ((m_scoreDef.GetOptimize() == BOOLEAN_NONE) && (m_scoreDef.GetChildCount(STAFFGRP, UNLIMITED_DEPTH) < 2)) {
+        optimize = false;
+    }
+
+    this->SetCurrentScoreDefDoc();
 
     Page *contentPage = this->SetDrawingPage(0);
     assert(contentPage);
@@ -720,7 +791,7 @@ void Doc::CastOffDoc()
 
     System *currentSystem = new System();
     contentPage->AddChild(currentSystem);
-    CastOffSystemsParams castOffSystemsParams(contentSystem, contentPage, currentSystem);
+    CastOffSystemsParams castOffSystemsParams(contentSystem, contentPage, currentSystem, this);
     castOffSystemsParams.m_systemWidth = this->m_drawingPageWidth - this->m_drawingPageMarginLeft
         - this->m_drawingPageMarginRight - currentSystem->m_systemLeftMar - currentSystem->m_systemRightMar;
     castOffSystemsParams.m_shift = -contentSystem->GetDrawingLabelsWidth();
@@ -733,7 +804,10 @@ void Doc::CastOffDoc()
     delete contentSystem;
 
     // Reset the scoreDef at the beginning of each system
-    this->CollectScoreDefs(true);
+    this->SetCurrentScoreDefDoc(true);
+    if (optimize) {
+        this->OptimizeScoreDefDoc(false);
+    }
 
     // Here we redo the alignment because of the new scoreDefs
     // We can actually optimise this and have a custom version that does not redo all the calculation
@@ -753,11 +827,10 @@ void Doc::CastOffDoc()
     contentPage->Process(&castOffPages, &castOffPagesParams);
     delete contentPage;
 
-    // LogDebug("Layout: %d pages", this->GetChildCount());
-
-    // We need to reset the drawing page to NULL
-    // because idx will still be 0 but contentPage is dead!
-    this->CollectScoreDefs(true);
+    this->SetCurrentScoreDefDoc(true);
+    if (optimize) {
+        this->OptimizeScoreDefDoc(false);
+    }
 }
 
 void Doc::CastOffRunningElements(CastOffPagesParams *params)
@@ -819,12 +892,12 @@ void Doc::UnCastOffDoc()
     // We need to reset the drawing page to NULL
     // because idx will still be 0 but contentPage is dead!
     this->ResetDrawingPage();
-    this->CollectScoreDefs(true);
+    this->SetCurrentScoreDefDoc(true);
 }
 
 void Doc::CastOffEncodingDoc()
 {
-    this->CollectScoreDefs();
+    this->SetCurrentScoreDefDoc();
 
     Pages *pages = this->GetPages();
     assert(pages);
@@ -855,7 +928,7 @@ void Doc::CastOffEncodingDoc()
     // We need to reset the drawing page to NULL
     // because idx will still be 0 but contentPage is dead!
     this->ResetDrawingPage();
-    this->CollectScoreDefs(true);
+    this->SetCurrentScoreDefDoc(true);
 }
 
 void Doc::ConvertToPageBasedDoc()
@@ -891,12 +964,15 @@ void Doc::ConvertToCastOffMensuralDoc()
 {
     if (!m_isMensuralMusicOnly) return;
 
+    // Do not convert transcription files
+    if (this->GetType() == Transcription) return;
+
     // We are converting to measure music in a definitiv way
     if (this->GetOptions()->m_mensuralToMeasure.GetValue()) {
         m_isMensuralMusicOnly = false;
     }
 
-    this->CollectScoreDefs();
+    this->SetCurrentScoreDefDoc();
 
     Pages *pages = this->GetPages();
     assert(pages);
@@ -939,12 +1015,15 @@ void Doc::ConvertToCastOffMensuralDoc()
     // We need to reset the drawing page to NULL
     // because idx will still be 0 but contentPage is dead!
     this->ResetDrawingPage();
-    this->CollectScoreDefs(true);
+    this->SetCurrentScoreDefDoc(true);
 }
 
 void Doc::ConvertToUnCastOffMensuralDoc()
 {
     if (!m_isMensuralMusicOnly) return;
+
+    // Do not convert transcription files
+    if (this->GetType() == Transcription) return;
 
     Pages *pages = this->GetPages();
     assert(pages);
@@ -963,7 +1042,7 @@ void Doc::ConvertToUnCastOffMensuralDoc()
 
     ConvertToUnCastOffMensuralParams convertToUnCastOffMensuralParams;
 
-    std::vector<AttComparison *> filters;
+    ArrayOfComparisons filters;
     // Now we can process by layer and move their content to (measure) segments
     for (auto const &staves : prepareProcessingListsParams.m_layerTree.child) {
         for (auto const &layers : staves.second.child) {
@@ -997,7 +1076,7 @@ void Doc::ConvertToUnCastOffMensuralDoc()
     // We need to reset the drawing page to NULL
     // because idx will still be 0 but contentPage is dead!
     this->ResetDrawingPage();
-    this->CollectScoreDefs(true);
+    this->SetCurrentScoreDefDoc(true);
 }
 
 void Doc::ConvertAnalyticalMarkupDoc(bool permanent)
@@ -1023,7 +1102,7 @@ void Doc::ConvertAnalyticalMarkupDoc(bool permanent)
 
     // Process by layer for matching @tie attribute - we process notes and chords, looking at
     // GetTie values and pitch and oct for matching notes
-    std::vector<AttComparison *> filters;
+    ArrayOfComparisons filters;
     for (staves = prepareProcessingListsParams.m_layerTree.child.begin();
          staves != prepareProcessingListsParams.m_layerTree.child.end(); ++staves) {
         for (layers = staves->second.child.begin(); layers != staves->second.child.end(); ++layers) {
@@ -1045,7 +1124,7 @@ void Doc::ConvertAnalyticalMarkupDoc(bool permanent)
             if (!convertAnalyticalMarkupParams.m_currentNotes.empty()) {
                 std::vector<Note *>::iterator iter;
                 for (iter = convertAnalyticalMarkupParams.m_currentNotes.begin();
-                     iter != convertAnalyticalMarkupParams.m_currentNotes.end(); iter++) {
+                     iter != convertAnalyticalMarkupParams.m_currentNotes.end(); ++iter) {
                     LogWarning("Unable to match @tie of note '%s', skipping it", (*iter)->GetUuid().c_str());
                 }
             }
@@ -1073,8 +1152,7 @@ Pages *Doc::GetPages()
 int Doc::GetPageCount()
 {
     Pages *pages = this->GetPages();
-    assert(pages);
-    return pages->GetChildCount();
+    return ((pages) ? pages->GetChildCount() : 0);
 }
 
 int Doc::GetGlyphHeight(wchar_t code, int staffSize, bool graceSize) const
@@ -1179,6 +1257,14 @@ int Doc::GetTextGlyphDescender(wchar_t code, FontInfo *font, bool graceSize) con
     y = y * font->GetPointSize() / glyph->GetUnitsPerEm();
     if (graceSize) y = y * this->m_options->m_graceFactor.GetValue();
     return y;
+}
+    
+int Doc::GetTextLineHeight(FontInfo *font, bool graceSize) const
+{
+    int descender = -this->GetTextGlyphDescender(L'q', font, graceSize);
+    int height = this->GetTextGlyphHeight(L'I', font, graceSize);
+    
+    return ((descender + height) * 1.1);
 }
 
 int Doc::GetDrawingUnit(int staffSize) const
@@ -1451,8 +1537,40 @@ int Doc::PrepareLyricsEnd(FunctorParams *functorParams)
     if ((params->m_currentSyl && params->m_lastNote) && (params->m_currentSyl->GetStart() != params->m_lastNote)) {
         params->m_currentSyl->SetEnd(params->m_lastNote);
     }
+    else if (m_options->m_openControlEvents.GetValue()) {
+        if ((params->m_currentSyl->GetWordpos() == sylLog_WORDPOS_i) || (params->m_currentSyl->GetWordpos() == sylLog_WORDPOS_m)) {
+            Measure *lastMeasure = dynamic_cast<Measure *>(this->FindChildByType(MEASURE, UNLIMITED_DEPTH, BACKWARD));
+            assert(lastMeasure);
+            params->m_currentSyl->SetEnd(lastMeasure->GetRightBarLine());
+        }
+    }
 
     return FUNCTOR_STOP;
 }
 
+int Doc::PrepareTimestampsEnd(FunctorParams *functorParams)
+{
+    PrepareTimestampsParams *params = dynamic_cast<PrepareTimestampsParams *>(functorParams);
+    assert(params);
+    
+    if (!m_options->m_openControlEvents.GetValue() || params->m_timeSpanningInterfaces.empty()) {
+        return FUNCTOR_CONTINUE;
+    }
+    
+    Measure *lastMeasure = dynamic_cast<Measure *>(this->FindChildByType(MEASURE, UNLIMITED_DEPTH, BACKWARD));
+    if (!lastMeasure) {
+        return FUNCTOR_CONTINUE;
+    }
+    
+    for (auto &pair : params->m_timeSpanningInterfaces) {
+        TimeSpanningInterface *interface = pair.first;
+        assert(interface);
+        if (!interface->GetEnd()) {
+            interface->SetEnd(lastMeasure->GetRightBarLine());
+        }
+    }
+    
+    return FUNCTOR_CONTINUE;
+}
+    
 } // namespace vrv

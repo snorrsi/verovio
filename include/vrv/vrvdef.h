@@ -24,7 +24,7 @@ namespace vrv {
 //----------------------------------------------------------------------------
 
 #define VERSION_MAJOR 2
-#define VERSION_MINOR 0
+#define VERSION_MINOR 1
 #define VERSION_REVISION 0
 // Adds "-dev" in the version number - should be set to false for releases
 #define VERSION_DEV true
@@ -48,13 +48,14 @@ enum ClassId {
     DEVICE_CONTEXT, // Should not be instanciated as is,
     FLOATING_OBJECT,
     FLOATING_POSITIONER,
-    //
+    // Ids for ungrouped objects
     ALIGNMENT,
     ALIGNMENT_REFERENCE,
     CLEF_ATTR,
     DOC,
     FB,
     GRACE_ALIGNER,
+    INSTRDEF,
     KEYSIG_ATTR,
     LABEL,
     LABELABBR,
@@ -93,6 +94,7 @@ enum ClassId {
     REG,
     RESTORE,
     SIC,
+    SUBST,
     SUPPLIED,
     UNCLEAR,
     EDITORIAL_ELEMENT_max,
@@ -116,6 +118,7 @@ enum ClassId {
     CONTROL_ELEMENT,
     ANCHORED_TEXT,
     ARPEG,
+    BRACKETSPAN,
     BREATH,
     DIR,
     DYNAM,
@@ -151,6 +154,7 @@ enum ClassId {
     DOTS,
     FLAG,
     FTREM,
+    HALFMRPT,
     KEYSIG,
     LIGATURE,
     MENSUR,
@@ -160,13 +164,16 @@ enum ClassId {
     MRPT2,
     MULTIREST,
     MULTIRPT,
+    NC,
     NOTE,
+    NEUME,
     TUPLET_NUM,
     PROPORT,
     REST,
     SPACE,
     STEM,
     SYL,
+    SYLLABLE,
     TIMESTAMP_ATTR,
     TUPLET,
     VERSE,
@@ -202,6 +209,7 @@ enum InterfaceId {
     INTERFACE_AREA_POS,
     INTERFACE_BOUNDARY,
     INTERFACE_DURATION,
+    INTERFACE_LINKING,
     INTERFACE_PITCH,
     INTERFACE_PLIST,
     INTERFACE_POSITION,
@@ -220,10 +228,16 @@ class Arpeg;
 class AttComparison;
 class BeamElementCoord;
 class BoundingBox;
+class Comparison;
 class FloatingPositioner;
+class GraceAligner;
+class InterfaceComparison;
 class LayerElement;
 class LedgerLine;
+class LinkingInterface;
+class Nc;
 class Note;
+class Neume;
 class Object;
 class PlistInterface;
 class Point;
@@ -237,7 +251,7 @@ typedef std::vector<Object *> ArrayOfObjects;
 
 typedef std::vector<Object *> ListOfObjects;
 
-typedef std::vector<AttComparison *> ArrayOfAttComparisons;
+typedef std::vector<Comparison *> ArrayOfComparisons;
 
 typedef std::vector<Note *> ChordCluster;
 
@@ -246,8 +260,12 @@ typedef std::vector<std::tuple<Alignment *, Alignment *, int> > ArrayOfAdjustmen
 typedef std::vector<std::tuple<Alignment *, Arpeg *, int, bool> > ArrayOfAligmentArpegTuples;
 
 typedef std::vector<BeamElementCoord *> ArrayOfBeamElementCoords;
+    
+typedef std::vector<std::pair<int, int> > ArrayOfIntPairs;
 
-typedef std::vector<std::pair<PlistInterface *, std::string> > ArrayOfInterfaceUuidPairs;
+typedef std::vector<std::pair<LinkingInterface *, std::string> > ArrayOfLinkingInterfaceUuidPairs;
+
+typedef std::vector<std::pair<PlistInterface *, std::string> > ArrayOfPlistInterfaceUuidPairs;
 
 typedef std::vector<std::pair<LayerElement *, Point> > ArrayOfLayerElementPointPairs;
 
@@ -268,6 +286,33 @@ typedef std::vector<TextElement *> ArrayOfTextElements;
 typedef std::map<Staff *, std::list<int> > MapOfDotLocs;
 
 typedef std::map<std::string, Option *> MapOfStrOptions;
+
+typedef std::map<int, GraceAligner *> MapOfIntGraceAligners;
+
+/**
+ * Generic int map recursive structure for storing hierachy of values
+ * For example, we want to process all staves one by one, and within each staff
+ * all layer one by one, and so one (lyrics, etc.). In IntTree, we can store
+ * @n with all existing values (1 => 1 => 1; 2 => 1 => 1)
+ * The stucture must be filled first and can then be used by instanciating a vector
+ * of corresponding Comparison (typically AttNIntegerComparison for @n attribute).
+ * See Doc::PrepareDrawing for an example.
+ */
+struct IntTree {
+    std::map<int, IntTree> child;
+};
+
+typedef std::map<int, IntTree> IntTree_t;
+
+/**
+ * This is the alternate way for representing map of maps. With this solution,
+ * we can easily have different types of key (attribute) at each level. We could
+ * mix int, string, or even MEI data_* types. The drawback is that a type has to
+ * be defined at each level. Also see Doc::PrepareDrawing for an example.
+ */
+typedef std::map<int, bool> VerseN_t;
+typedef std::map<int, VerseN_t> LayerN_VerserN_t;
+typedef std::map<int, LayerN_VerserN_t> StaffN_LayerN_VerseN_t;
 
 //----------------------------------------------------------------------------
 // Global defines
@@ -332,6 +377,14 @@ enum FunctorCode { FUNCTOR_CONTINUE = 0, FUNCTOR_SIBLINGS, FUNCTOR_STOP };
 #define VRV_TEXT_E552 0xE552
 
 //----------------------------------------------------------------------------
+// data.LINEWIDTHTERM factors
+//----------------------------------------------------------------------------
+    
+#define LINEWIDTHTERM_factor_narrow 0.5
+#define LINEWIDTHTERM_factor_medium 2.0
+#define LINEWIDTHTERM_factor_wide 4.0
+
+//----------------------------------------------------------------------------
 // Types for editorial element
 //----------------------------------------------------------------------------
 
@@ -384,13 +437,19 @@ enum { SPANNING_START_END = 0, SPANNING_START, SPANNING_END, SPANNING_MIDDLE };
  * scoreDef layer elements and cautionary scoreDef layer elements
  */
 
-enum ElementScoreDefRole { NONE = 0, SYSTEM_SCOREDEF, INTERMEDIATE_SCOREDEF, CAUTIONARY_SCOREDEF };
+enum ElementScoreDefRole { SCOREDEF_NONE = 0, SCOREDEF_SYSTEM, SCOREDEF_INTERMEDIATE, SCOREDEF_CAUTIONARY };
 
 //----------------------------------------------------------------------------
 // Artic part types
 //----------------------------------------------------------------------------
 
 enum ArticPartType { ARTIC_PART_INSIDE = 0, ARTIC_PART_OUTSIDE };
+
+//----------------------------------------------------------------------------
+// Visibility optimization
+//----------------------------------------------------------------------------
+
+enum VisibilityOptimization { OPTIMIZATION_NONE = 0, OPTIMIZATION_HIDDEN, OPTIMIZATION_SHOW };
 
 //----------------------------------------------------------------------------
 // Layout positions (3 x 3 grid)

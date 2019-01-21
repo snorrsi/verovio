@@ -15,7 +15,7 @@
 
 // In case it is not defined before...
 #ifndef M_PI
-#define M_PI 3.14159265358979323846
+#define M_PI (3.14159265358979323846264338327950288)
 #endif
 
 //----------------------------------------------------------------------------
@@ -127,8 +127,8 @@ public:
      * @name Getters for text extend (non-virtual)
      */
     ///@{
-    virtual void GetTextExtent(const std::string &string, TextExtend *extend);
-    virtual void GetTextExtent(const std::wstring &string, TextExtend *extend);
+    virtual void GetTextExtent(const std::string &string, TextExtend *extend, bool typeSize);
+    virtual void GetTextExtent(const std::wstring &string, TextExtend *extend, bool typeSize);
     virtual void GetSmuflTextExtent(const std::wstring &string, TextExtend *extend);
 
     /**

@@ -24,7 +24,8 @@ class Dynam : public ControlElement,
               public TextListInterface,
               public TextDirInterface,
               public TimeSpanningInterface,
-              public AttVerticalAlignment {
+              public AttExtender,
+              public AttVerticalGroup {
 public:
     /**
      * @name Constructors, destructors, and other standard methods

@@ -153,7 +153,7 @@ void Page::LayOutTranscription(bool force)
     // - each LayerElement object will have its Alignment pointer initialized
     Functor alignHorizontally(&Object::AlignHorizontally);
     Functor alignHorizontallyEnd(&Object::AlignHorizontallyEnd);
-    AlignHorizontallyParams alignHorizontallyParams(&alignHorizontally);
+    AlignHorizontallyParams alignHorizontallyParams(&alignHorizontally, doc);
     this->Process(&alignHorizontally, &alignHorizontallyParams, &alignHorizontallyEnd);
 
     // Align the content of the page using system aligners
@@ -221,7 +221,7 @@ void Page::LayOutHorizontally()
     // - each LayerElement object will have its Alignment pointer initialized
     Functor alignHorizontally(&Object::AlignHorizontally);
     Functor alignHorizontallyEnd(&Object::AlignHorizontallyEnd);
-    AlignHorizontallyParams alignHorizontallyParams(&alignHorizontally);
+    AlignHorizontallyParams alignHorizontallyParams(&alignHorizontally, doc);
     this->Process(&alignHorizontally, &alignHorizontallyParams, &alignHorizontallyEnd);
 
     // Align the content of the page using system aligners
@@ -236,14 +236,18 @@ void Page::LayOutHorizontally()
     // Does non-linear spacing based on the duration space between two Alignment objects.
     if (!doc->GetOptions()->m_evenNoteSpacing.GetValue()) {
         int longestActualDur = DUR_4;
-        // Get the longest duration in the piece
-        AttDurExtreme durExtremeComparison(LONGEST);
-        Object *longestDur = this->FindChildExtremeByAttComparison(&durExtremeComparison);
-        if (longestDur) {
-            DurationInterface *interface = longestDur->GetDurationInterface();
-            assert(interface);
-            longestActualDur = interface->GetActualDur();
-            // LogDebug("Longest duration is DUR_* code %d", longestActualDur);
+        
+        // Detect the longest duration in order to adjust the spacing (false by default)
+        if (doc->GetOptions()->m_spacingDurDetection.GetValue()) {
+            // Get the longest duration in the piece
+            AttDurExtreme durExtremeComparison(LONGEST);
+            Object *longestDur = this->FindChildExtremeByComparison(&durExtremeComparison);
+            if (longestDur) {
+                DurationInterface *interface = longestDur->GetDurationInterface();
+                assert(interface);
+                longestActualDur = interface->GetActualDur();
+                // LogDebug("Longest duration is DUR_* code %d", longestActualDur);
+            }
         }
 
         Functor setAlignmentX(&Object::SetAlignmentXPos);
@@ -316,6 +320,12 @@ void Page::LayOutHorizontally()
     Functor adjustArpegEnd(&Object::AdjustArpegEnd);
     AdjustArpegParams adjustArpegParams(doc, &adjustArpeg);
     this->Process(&adjustArpeg, &adjustArpegParams, &adjustArpegEnd);
+
+    // Prevent a margin overflow
+    Functor adjustXOverlfow(&Object::AdjustXOverflow);
+    Functor adjustXOverlfowEnd(&Object::AdjustXOverflowEnd);
+    AdjustXOverflowParams adjustXOverflowParams(doc->GetDrawingUnit(100));
+    this->Process(&adjustXOverlfow, &adjustXOverflowParams, &adjustXOverlfowEnd);
 
     // Adjust measure X position
     AlignMeasuresParams alignMeasuresParams;
@@ -495,7 +505,7 @@ void Page::AdjustSylSpacingByVerse(PrepareProcessingListsParams &listsParams, Do
 
     if (listsParams.m_verseTree.child.empty()) return;
 
-    std::vector<AttComparison *> filters;
+    ArrayOfComparisons filters;
 
     // Same for the lyrics, but Verse by Verse since Syl are TimeSpanningInterface elements for handling connectors
     for (staves = listsParams.m_verseTree.child.begin(); staves != listsParams.m_verseTree.child.end(); ++staves) {

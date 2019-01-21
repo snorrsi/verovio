@@ -24,8 +24,6 @@
 
 namespace vrv {
 
-int BoundingBox::s_deCasteljau[4][4];
-
 //----------------------------------------------------------------------------
 // BoundingBox
 //----------------------------------------------------------------------------
@@ -253,8 +251,8 @@ int BoundingBox::HorizontalLeftOverlap(const BoundingBox *other, Doc *doc, int m
 
     anchor1 = this->GetRectangles(SMUFL_cutOutNW, SMUFL_cutOutSW, BB1rect, doc);
     anchor2 = other->GetRectangles(SMUFL_cutOutNE, SMUFL_cutOutSE, BB2rect, doc);
-    for (i = 0; i < anchor1; i++) {
-        for (j = 0; j < anchor2; j++) {
+    for (i = 0; i < anchor1; ++i) {
+        for (j = 0; j < anchor2; ++j) {
             overlap = std::max(overlap, RectLeftOverlap(BB1rect[i], BB2rect[j], margin, vMargin));
         }
     }
@@ -271,8 +269,8 @@ int BoundingBox::HorizontalRightOverlap(const BoundingBox *other, Doc *doc, int 
 
     anchor1 = this->GetRectangles(SMUFL_cutOutNE, SMUFL_cutOutSE, BB1rect, doc);
     anchor2 = other->GetRectangles(SMUFL_cutOutNW, SMUFL_cutOutSW, BB2rect, doc);
-    for (i = 0; i < anchor1; i++) {
-        for (j = 0; j < anchor2; j++) {
+    for (i = 0; i < anchor1; ++i) {
+        for (j = 0; j < anchor2; ++j) {
             overlap = std::max(overlap, RectRightOverlap(BB1rect[i], BB2rect[j], margin, vMargin));
         }
     }
@@ -289,8 +287,8 @@ int BoundingBox::VerticalTopOverlap(const BoundingBox *other, Doc *doc, int marg
 
     anchor1 = this->GetRectangles(SMUFL_cutOutNW, SMUFL_cutOutNE, BB1rect, doc);
     anchor2 = other->GetRectangles(SMUFL_cutOutSW, SMUFL_cutOutSE, BB2rect, doc);
-    for (i = 0; i < anchor1; i++) {
-        for (j = 0; j < anchor2; j++) {
+    for (i = 0; i < anchor1; ++i) {
+        for (j = 0; j < anchor2; ++j) {
             overlap = std::max(overlap, RectTopOverlap(BB1rect[i], BB2rect[j], margin, hMargin));
         }
     }
@@ -307,8 +305,8 @@ int BoundingBox::VerticalBottomOverlap(const BoundingBox *other, Doc *doc, int m
 
     anchor1 = this->GetRectangles(SMUFL_cutOutSW, SMUFL_cutOutSE, BB1rect, doc);
     anchor2 = other->GetRectangles(SMUFL_cutOutNW, SMUFL_cutOutNE, BB2rect, doc);
-    for (i = 0; i < anchor1; i++) {
-        for (j = 0; j < anchor2; j++) {
+    for (i = 0; i < anchor1; ++i) {
+        for (j = 0; j < anchor2; ++j) {
             overlap = std::max(overlap, RectBottomOverlap(BB1rect[i], BB2rect[j], margin, hMargin));
         }
     }
@@ -538,9 +536,8 @@ int BoundingBox::Intersects(FloatingPositioner *curve, int margin) const
             // The curve is already below the content
             if ((curve->GetContentTop() + margin) < this->GetContentBottom()) return 0;
             int xMaxY = curve->CalcXMinMaxY(topBezier);
-            // Check if the box is below (should be + margin, but because of de Casteljau different it is ommitted)
-            int leftY = BoundingBox::CalcBezierAtPosition(bottomBezier, this->GetContentLeft());
-            int rightY = BoundingBox::CalcBezierAtPosition(bottomBezier, this->GetContentRight());
+            int leftY = BoundingBox::CalcBezierAtPosition(bottomBezier, this->GetContentLeft()) + margin;
+            int rightY = BoundingBox::CalcBezierAtPosition(bottomBezier, this->GetContentRight() + margin);
             // Everything is underneath
             if ((leftY >= this->GetContentTop()) && (rightY >= this->GetContentTop())) return 0;
             // Recalculate for above
@@ -560,9 +557,8 @@ int BoundingBox::Intersects(FloatingPositioner *curve, int margin) const
             if ((curve->GetContentBottom() - margin) > this->GetContentTop()) return 0;
             int xMinY = curve->CalcXMinMaxY(bottomBezier);
             // Check if the box is above
-            int leftY = BoundingBox::CalcBezierAtPosition(topBezier, this->GetContentLeft());
-            int rightY = BoundingBox::CalcBezierAtPosition(topBezier, this->GetContentRight());
-            // Everything is above (should be - margin, but because of de Casteljau different it is ommitted)
+            int leftY = BoundingBox::CalcBezierAtPosition(topBezier, this->GetContentLeft()) - margin;
+            int rightY = BoundingBox::CalcBezierAtPosition(topBezier, this->GetContentRight()) - margin;
             if ((leftY <= this->GetContentBottom()) && (rightY <= this->GetContentBottom())) return 0;
             // Recalculate for below
             leftY = BoundingBox::CalcBezierAtPosition(bottomBezier, this->GetContentLeft()) - margin;
@@ -719,21 +715,26 @@ pow (t, 3)* bezier[3].y;
 
 int BoundingBox::CalcBezierAtPosition(const Point bezier[4], int x)
 {
-    int i, j;
     double t = 0.0;
     // avoid division by 0
     if (bezier[3].x != bezier[0].x) t = (double)(x - bezier[0].x) / (double)(bezier[3].x - bezier[0].x);
     t = std::min(1.0, std::max(0.0, t));
-    int n = 4;
 
-    for (i = 0; i < n; i++) BoundingBox::s_deCasteljau[0][i] = bezier[i].y;
-    for (j = 1; j < n; j++) {
-        for (int i = 0; i < 4 - j; i++) {
-            BoundingBox::s_deCasteljau[j][i]
-                = BoundingBox::s_deCasteljau[j - 1][i] * (1 - t) + BoundingBox::s_deCasteljau[j - 1][i + 1] * t;
-        }
-    }
-    return BoundingBox::s_deCasteljau[n - 1][0];
+    Point p = BoundingBox::CalcDeCasteljau(bezier, t);
+
+    return p.y;
+}
+
+Point BoundingBox::CalcDeCasteljau(const Point bezier[4], double t)
+{
+    Point p;
+
+    p.x = pow((1 - t), 3) * bezier[0].x + 3 * t * pow((1 - t), 2) * bezier[1].x + 3 * (1 - t) * pow(t, 2) * bezier[2].x
+        + pow(t, 3) * bezier[3].x;
+    p.y = pow((1 - t), 3) * bezier[0].y + 3 * t * pow((1 - t), 2) * bezier[1].y + 3 * (1 - t) * pow(t, 2) * bezier[2].y
+        + pow(t, 3) * bezier[3].y;
+
+    return p;
 }
 
 void BoundingBox::CalcThickBezier(
@@ -800,7 +801,7 @@ void BoundingBox::ApproximateBezierBoundingBox(
     tody = dy - cy;
     double step = 1.0 / BEZIER_APPROXIMATION;
     int i;
-    for (i = 0; i < (int)(BEZIER_APPROXIMATION + 1.0); i++) {
+    for (i = 0; i < (int)(BEZIER_APPROXIMATION + 1.0); ++i) {
         double d = i * step;
         px = ax + d * tobx;
         py = ay + d * toby;
@@ -861,6 +862,65 @@ int BoundingBox::RectBottomOverlap(const Point rect1[2], const Point rect2[2], i
 {
     if ((rect1[0].x > rect2[1].x + hMargin) || (rect1[1].x < rect2[0].x - hMargin)) return 0;
     return std::max(0, rect2[1].y - rect1[0].y + margin);
+}
+
+//----------------------------------------------------------------------------
+// SegmentedLine
+//----------------------------------------------------------------------------
+
+SegmentedLine::SegmentedLine(int start, int end)
+{
+    if (start > end) {
+        BoundingBox::Swap(start, end);
+    }
+    m_segments.push_back(std::make_pair(start, end));
+}
+
+void SegmentedLine::GetStartEnd(int &start, int &end, int idx)
+{
+    assert(idx >= 0);
+    assert(idx < GetSegmentCount());
+
+    start = m_segments.at(idx).first;
+    end = m_segments.at(idx).second;
+}
+
+void SegmentedLine::AddGap(int start, int end)
+{
+    assert(start != end);
+
+    if (start > end) {
+        BoundingBox::Swap(start, end);
+    }
+
+    // nothing to do
+    if (m_segments.empty()) return;
+
+    // insert the gap
+    ArrayOfIntPairs::iterator iter = m_segments.begin();
+    while (iter != m_segments.end()) {
+        // drop the segment because the gap encompass it
+        if ((start <= iter->first) && (end >= iter->second)) {
+            iter = m_segments.erase(iter);
+            continue;
+        }
+        // cut the segment because the gap in within it
+        if ((iter->first <= start) && (iter->second >= end)) {
+            iter = m_segments.insert(iter, std::make_pair(iter->first, start));
+            ++iter;
+            iter->first = end;
+            break;
+        }
+        // move the start of the segment
+        if ((start < iter->first) && (end >= iter->first)) {
+            iter->first = end;
+        }
+        // move the end of the segment
+        if ((end > iter->second) && (start <= iter->second)) {
+            iter->second = start;
+        }
+        ++iter;
+    }
 }
 
 } // namespace vrv

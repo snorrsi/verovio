@@ -162,9 +162,14 @@ public:
     static Point CalcPositionAfterRotation(Point point, float alpha, Point center);
 
     /**
-     * Calculate the position of a point after a rotation of alpha around the center
+     * Calculate the y position of a bezier at position x
      */
     static int CalcBezierAtPosition(const Point bezier[4], int x);
+
+    /**
+     * Calculate the point bezier point position for a t between 0.0 and 1.0
+     */
+    static Point CalcDeCasteljau(const Point bezier[4], double t);
 
     /**
      * Calculate the position of the bezier above and below for a thick bezier
@@ -242,11 +247,63 @@ private:
      * The font size for the smufl glyph used for calculating the bounding box rectangles.
      */
     int m_smuflGlyphFontSize;
+};
+
+//----------------------------------------------------------------------------
+// SegmentedLine
+//----------------------------------------------------------------------------
+
+/**
+ */
+class SegmentedLine {
+public:
+    /**
+     * @name Constructors, destructors, reset methods
+     * Reset method reset all attribute classes
+     */
+    ///@{
+    SegmentedLine(int start, int end);
+    virtual ~SegmentedLine(){};
+    ///@}
 
     /**
-     * Buffer for De-Casteljau algorithm
+     * Check if the segmented line is empty
      */
-    static int s_deCasteljau[4][4];
+    bool IsEmpty() { return (m_segments.empty()); }
+
+    /**
+     * Check if the line is one single segment
+     */
+    bool IsUnsegmented() { return (m_segments.size() == 1); }
+
+    /**
+     * The number of segments
+     */
+    int GetSegmentCount() { return (int)m_segments.size(); }
+
+    /**
+     * Get the start and end of a segment
+     */
+    void GetStartEnd(int &start, int &end, int idx);
+
+    /**
+     * Add a gap in the line
+     */
+    void AddGap(int start, int end);
+
+protected:
+    //
+private:
+    //
+public:
+    //
+protected:
+    //
+private:
+    /**
+     * An vector of line segments
+     */
+    ArrayOfIntPairs m_segments;
 };
 
 } // namespace vrv

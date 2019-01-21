@@ -12,7 +12,9 @@
 #include "options.h"
 #include "scoredef.h"
 
+namespace smf {
 class MidiFile;
+}
 
 namespace vrv {
 
@@ -152,6 +154,7 @@ public:
     int GetTextGlyphHeight(wchar_t code, FontInfo *font, bool graceSize) const;
     int GetTextGlyphWidth(wchar_t code, FontInfo *font, bool graceSize) const;
     int GetTextGlyphDescender(wchar_t code, FontInfo *font, bool graceSize) const;
+    int GetTextLineHeight(FontInfo *font, bool graceSize) const;
     ///@}
 
     /**
@@ -192,7 +195,7 @@ public:
      * Export the document to a MIDI file.
      * Run trough all the layers and fill the midi file content.
      */
-    void ExportMIDI(MidiFile *midiFile);
+    void ExportMIDI(smf::MidiFile *midiFile);
 
     /**
      * Extract a timemap from the document to a JSON string.
@@ -209,7 +212,12 @@ public:
      * It uses the MusObject::SetPageScoreDef functor method for parsing the file.
      * This will be done only if m_currentScoreDefDone is false or force is true.
      */
-    void CollectScoreDefs(bool force = false);
+    void SetCurrentScoreDefDoc(bool force = false);
+
+    /**
+     * Optimize the scoreDef once the document is cast-off.
+     */
+    void OptimizeScoreDefDoc(bool encoded = false);
 
     /**
      * Prepare the document for drawing.
@@ -330,6 +338,11 @@ public:
      * See Object::PrepareLyricsEnd
      */
     virtual int PrepareLyricsEnd(FunctorParams *functorParams);
+    
+    /**
+     * See Object::PrepareTimestampsEnd
+     */
+    virtual int PrepareTimestampsEnd(FunctorParams *functorParams);
 
 private:
     /**
@@ -342,6 +355,16 @@ public:
      * A copy of the header tree stored as pugi::xml_document
      */
     pugi::xml_document m_header;
+    
+    /**
+     * A copy of the header tree stored as pugi::xml_document
+     */
+    pugi::xml_document m_front;
+    
+    /**
+     * A copy of the header tree stored as pugi::xml_document
+     */
+    pugi::xml_document m_back;
 
     /**
      * Holds the top scoreDef.

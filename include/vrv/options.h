@@ -45,12 +45,6 @@ class OptionGrp;
 // the key signature spacing factor
 #define TEMP_KEYSIG_STEP 1.3
 
-// the maximum angle of a slur
-#define TEMP_SLUR_MAX_SLOPE (45 * M_PI / 180)
-#define TEMP_SLUR_CURVE_FACTOR 40 // a factor to allow more (0) or less (100) curved slurs
-#define TEMP_SLUR_HEIGHT_FACTOR 8 // high value means flatter slurs
-#define TEMP_SLUR_CONTROL_POINT_FACTOR 5 // higher value means more curved at the end
-
 /* Options parameters for mensural notation */
 // Ratios of mensural notehead, accidental, aug. dot size to CMN for the same staff size
 #define TEMP_MNOTEHEAD_SIZE_FACTOR 1.0
@@ -58,12 +52,6 @@ class OptionGrp;
 #define TEMP_MAUGDOT_SIZE_FACTOR 1.0
 // Width of the minima diamond relative to its height
 #define TEMP_MINIMA_WIDTH_FACTOR 1.0
-// Size of mensuration sign circle relative to space between staff lines
-#define MSIGN_CIRCLE_DIAM 1.7
-// Vertical position of center of mensuration sign as distance below top of the staff
-#define MSIGN_STAFFLINES_BELOW_TOP 2.0
-// Size of dot inside mensuration signs relative to space between staff lines
-#define MSIGN_DOT_DIAM 0.4
 // Relative size of figures in proportions
 #define PROPRT_SIZE_FACTOR 1.0
 // Linewidth for staff lines in mensural notation, rel. to "normal" width of staff lines */
@@ -472,6 +460,7 @@ public:
     OptionBool m_noFooter;
     OptionBool m_noHeader;
     OptionBool m_noJustification;
+    OptionBool m_openControlEvents;
     OptionInt m_pageHeight;
     OptionInt m_pageMarginBottom;
     OptionInt m_pageMarginLeft;
@@ -490,16 +479,26 @@ public:
     OptionInt m_beamMinSlope;
     OptionString m_font;
     OptionDbl m_graceFactor;
+    OptionBool m_graceRhythmAlign;
+    OptionBool m_graceRightAlign;
     OptionDbl m_hairpinSize;
     OptionDbl m_leftPosition;
+    OptionDbl m_lyricHyphenLength;
     OptionDbl m_lyricHyphenWidth;
+    OptionBool m_lyricNoStartHyphen;
     OptionDbl m_lyricSize;
     OptionDbl m_lyricTopMinMargin;
+    OptionDbl m_lyricWordSpace;
     OptionInt m_measureMinWidth;
     OptionIntMap m_measureNumber;
+    OptionInt m_slurControlPoints;
+    OptionInt m_slurCurveFactor;
+    OptionInt m_slurHeightFactor;
     OptionDbl m_slurMaxHeight;
+    OptionInt m_slurMaxSlope;
     OptionDbl m_slurMinHeight;
     OptionDbl m_slurThickness;
+    OptionBool m_spacingDurDetection;
     OptionDbl m_spacingLinear;
     OptionDbl m_spacingNonLinear;
     OptionInt m_spacingStaff;
@@ -516,6 +515,7 @@ public:
     OptionArray m_appXPathQuery;
     OptionArray m_choiceXPathQuery;
     OptionString m_mdivXPathQuery;
+    OptionArray m_substXPathQuery;
 
     /**
      * Element margins

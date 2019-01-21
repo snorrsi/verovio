@@ -70,7 +70,7 @@ void View::SetPage(int pageIdx, bool doLayout)
     m_currentPage = m_doc->SetDrawingPage(pageIdx);
 
     if (doLayout) {
-        m_doc->CollectScoreDefs();
+        m_doc->SetCurrentScoreDefDoc();
         // if we once deal with multiple views, it would be better
         // to redo the layout only when necessary?
         if (m_doc->GetType() == Transcription)
@@ -166,7 +166,7 @@ std::wstring View::IntToSmuflFigures(unsigned short number, int offset)
     std::wstring str = stream.str();
 
     int i;
-    for (i = 0; i < (int)str.size(); i++) {
+    for (i = 0; i < (int)str.size(); ++i) {
         str[i] += offset - 48;
     }
     return str;
