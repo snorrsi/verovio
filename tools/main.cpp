@@ -493,6 +493,20 @@ int main(int argc, char **argv)
             exit(1);
         }
         else {
+            std::string _outfile = outfile;
+            _outfile += ".json";
+            if (std_output) {
+                std::string _output;
+                std::cout << toolkit.RenderToTimemap();
+            }
+            else if (!toolkit.RenderToTimemapFile(_outfile)) {
+                std::cerr << "Unable to write Timemap to " << _outfile << "." << std::endl;
+                exit(1);
+            }
+            else {
+                std::cerr << "Output written to " << _outfile << "." << std::endl;
+            }
+            
             std::cerr << "Output written to " << outfile << "." << std::endl;
             int p;
             for (p = from; p < to; p++) {

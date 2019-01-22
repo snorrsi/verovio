@@ -371,6 +371,9 @@ void View::DrawStaffDefLabels(DeviceContext *dc, Measure *measure, ScoreDef *sco
     assert(measure);
     assert(scoreDef);
 
+    //SS do not draw any labels.
+    return;
+    
     const ListOfObjects *scoreDefChildren = scoreDef->GetList(scoreDef);
     ListOfObjects::const_iterator iter = scoreDefChildren->begin();
     while (iter != scoreDefChildren->end()) {

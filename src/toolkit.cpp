@@ -26,6 +26,7 @@
 #include "nc.h"
 #include "neume.h"
 #include "note.h"
+#include "rest.h"
 #include "options.h"
 #include "page.h"
 #include "slur.h"
@@ -1225,6 +1226,21 @@ int Toolkit::GetTimeForElement(const std::string &xmlId)
         // For now ignore repeats and access always the first
         timeofElement = measure->GetRealTimeOffsetMilliseconds(1);
         timeofElement += note->GetRealTimeOnsetMilliseconds();
+    } else if (element->Is(REST)) {
+        if (!m_doc.HasMidiTimemap()) {
+            // generate MIDI timemap before progressing
+            m_doc.CalculateMidiTimemap();
+        }
+        if (!m_doc.HasMidiTimemap()) {
+            LogWarning("Calculation of MIDI timemap failed, time value is invalid.");
+        }
+        Rest *rest = dynamic_cast<Rest *>(element);
+        assert(rest);
+        Measure *measure = dynamic_cast<Measure *>(rest->GetFirstParent(MEASURE));
+        assert(measure);
+        // For now ignore repeats and access always the first
+        timeofElement = measure->GetRealTimeOffsetMilliseconds(1);
+        timeofElement += rest->GetRealTimeOnsetMilliseconds();
     }
     return timeofElement;
 }

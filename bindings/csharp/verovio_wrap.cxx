@@ -962,6 +962,25 @@ SWIGEXPORT int SWIGSTDCALL CSharp_MussilafNotationfVerovio_Toolkit_GetTimeForEle
 }
 
 
+SWIGEXPORT char * SWIGSTDCALL CSharp_MussilafNotationfVerovio_Toolkit_GetMIDIValuesForElement___(void * jarg1, char * jarg2) {
+  char * jresult ;
+  vrv::Toolkit *arg1 = (vrv::Toolkit *) 0 ;
+  std::string *arg2 = 0 ;
+  std::string result;
+  
+  arg1 = (vrv::Toolkit *)jarg1; 
+  if (!jarg2) {
+    SWIG_CSharpSetPendingExceptionArgument(SWIG_CSharpArgumentNullException, "null string", 0);
+    return 0;
+  }
+  std::string arg2_str(jarg2);
+  arg2 = &arg2_str; 
+  result = (arg1)->GetMIDIValuesForElement((std::string const &)*arg2);
+  jresult = SWIG_csharp_string_callback((&result)->c_str()); 
+  return jresult;
+}
+
+
 SWIGEXPORT unsigned int SWIGSTDCALL CSharp_MussilafNotationfVerovio_Toolkit_SetScale___(void * jarg1, int jarg2) {
   unsigned int jresult ;
   vrv::Toolkit *arg1 = (vrv::Toolkit *) 0 ;
