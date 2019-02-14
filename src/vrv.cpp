@@ -118,6 +118,9 @@ bool Resources::LoadFont(std::string fontName)
     // Since the filename starts with the Unicode code, it is used
     // to assign the glyph to the corresponding position in m_fonts
     while ((pdir = readdir(dir))) {
+        if (strstr(pdir->d_name, ".xml.meta")) {
+            continue;
+        }
         if (strstr(pdir->d_name, ".xml")) {
             // E.g, : E053-gClef8va.xml => strtol extracts E053 as hex
             wchar_t smuflCode = (wchar_t)strtol(pdir->d_name, NULL, 16);
@@ -239,7 +242,7 @@ struct timeval start;
 /** For disabling log */
 bool noLog = false;
 
-#ifdef EMSCRIPTEN
+#ifdef EMSCRIPTEN_OR_LIB
 std::vector<std::string> logBuffer;
 #endif
 
@@ -262,7 +265,7 @@ void LogDebug(const char *fmt, ...)
 {
     if (noLog) return;
 #if defined(DEBUG)
-#ifdef EMSCRIPTEN
+#ifdef EMSCRIPTEN_OR_LIB
     std::string s;
     va_list args;
     va_start(args, fmt);
@@ -283,7 +286,7 @@ void LogDebug(const char *fmt, ...)
 void LogError(const char *fmt, ...)
 {
     if (noLog) return;
-#ifdef EMSCRIPTEN
+#ifdef EMSCRIPTEN_OR_LIB
     std::string s;
     va_list args;
     va_start(args, fmt);
@@ -303,7 +306,7 @@ void LogError(const char *fmt, ...)
 void LogMessage(const char *fmt, ...)
 {
     if (noLog) return;
-#ifdef EMSCRIPTEN
+#ifdef EMSCRIPTEN_OR_LIB
     std::string s;
     va_list args;
     va_start(args, fmt);
@@ -323,7 +326,7 @@ void LogMessage(const char *fmt, ...)
 void LogWarning(const char *fmt, ...)
 {
     if (noLog) return;
-#ifdef EMSCRIPTEN
+#ifdef EMSCRIPTEN_OR_LIB
     std::string s;
     va_list args;
     va_start(args, fmt);
@@ -345,7 +348,7 @@ void DisableLog()
     noLog = true;
 }
 
-#ifdef EMSCRIPTEN
+#ifdef EMSCRIPTEN_OR_LIB
 bool LogBufferContains(const std::string &s)
 {
     std::vector<std::string>::iterator iter = logBuffer.begin();
@@ -360,13 +363,14 @@ void AppendLogBuffer(bool checkDuplicate, std::string message, consoleLogLevel l
 {
     if (checkDuplicate && LogBufferContains(message)) return;
     logBuffer.push_back(message);
-
+#if EMSCRIPTEN
     switch (level) {
         case CONSOLE_ERROR: EM_ASM_ARGS({ console.error(Pointer_stringify($0)); }, message.c_str()); break;
         case CONSOLE_WARN: EM_ASM_ARGS({ console.warn(Pointer_stringify($0)); }, message.c_str()); break;
         case CONSOLE_INFO: EM_ASM_ARGS({ console.info(Pointer_stringify($0)); }, message.c_str()); break;
         default: EM_ASM_ARGS({ console.log(Pointer_stringify($0)); }, message.c_str()); break;
     }
+#endif
 }
 
 #endif

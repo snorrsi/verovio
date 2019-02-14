@@ -890,7 +890,7 @@ std::string Toolkit::GetElementAttr(const std::string &xmlId)
 
 bool Toolkit::Edit(const std::string &json_editorAction)
 {
-#ifdef USE_EMSCRIPTEN
+#ifdef USE_EMSCRIPTEN_OR_LIB
 
     jsonxx::Object json;
 
@@ -936,7 +936,7 @@ bool Toolkit::Edit(const std::string &json_editorAction)
 
 std::string Toolkit::GetLog()
 {
-#ifdef USE_EMSCRIPTEN
+#ifdef USE_EMSCRIPTEN_OR_LIB
     std::string str;
     std::vector<std::string>::iterator iter;
     for (iter = logBuffer.begin(); iter != logBuffer.end(); ++iter) {
@@ -956,7 +956,7 @@ std::string Toolkit::GetVersion()
 
 void Toolkit::ResetLogBuffer()
 {
-#ifdef USE_EMSCRIPTEN
+#ifdef USE_EMSCRIPTEN_OR_LIB
     vrv::logBuffer.clear();
 #endif
 }
@@ -1494,7 +1494,7 @@ bool Toolkit::Set(std::string elementId, std::string attrType, std::string attrV
     return false;
 }
 
-#ifdef USE_EMSCRIPTEN
+#ifdef USE_EMSCRIPTEN_OR_LIB
 bool Toolkit::ParseDragAction(jsonxx::Object param, std::string *elementId, int *x, int *y)
 {
     if (!param.has<jsonxx::String>("elementId")) return false;

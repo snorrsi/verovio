@@ -21,6 +21,12 @@
 #include <time.h>
 #endif
 
+#ifdef EMSCRIPTEN
+#ifndef EMSCRIPTEN_OR_LIB
+#define EMSCRIPTEN_OR_LIB
+#endif
+#endif
+
 namespace vrv {
 
 class Glyph;
@@ -40,7 +46,7 @@ void DisableLog();
 /**
  * Member and functions specific to emscripten loging that uses a vector of string to buffer the logs.
  */
-#ifdef EMSCRIPTEN
+#ifdef EMSCRIPTEN_OR_LIB
 enum consoleLogLevel { CONSOLE_LOG = 0, CONSOLE_INFO, CONSOLE_WARN, CONSOLE_ERROR };
 extern std::vector<std::string> logBuffer;
 bool LogBufferContains(const std::string &s);

@@ -366,6 +366,12 @@ int Measure::GetRealTimeOffsetMilliseconds(int repeat) const
     return m_realTimeOffsetMilliseconds.at(repeat - 1);
 }
 
+double Measure::GetScoreTimeOffset(int repeat) const
+{
+    if ((repeat < 1) || repeat > (int)m_scoreTimeOffset.size()) return 0;
+    return m_scoreTimeOffset.at(repeat - 1);
+}
+
 void Measure::SetDrawingBarLines(Measure *previous, bool systemBreak, bool scoreDefInsert)
 {
     // First set the right barline. If none then set a single one.

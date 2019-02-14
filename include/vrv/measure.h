@@ -192,6 +192,12 @@ public:
      */
     int GetRealTimeOffsetMilliseconds(int repeat) const;
 
+    //SS
+    /**
+     * Return the score offset for the repeat (1-based).
+     */
+    double GetScoreTimeOffset(int repeat) const;
+
     //----------//
     // Functors //
     //----------//

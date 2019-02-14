@@ -18,6 +18,12 @@
 //----------------------------------------------------------------------------
 
 #ifdef USE_EMSCRIPTEN
+#ifndef USE_EMSCRIPTEN_OR_LIB
+#define USE_EMSCRIPTEN_OR_LIB
+#endif
+#endif
+
+#ifdef USE_EMSCRIPTEN_OR_LIB
 #include "jsonxx.h"
 #endif
 
@@ -279,7 +285,7 @@ private:
     bool LoadUTF16File(const std::string &filename);
 
 protected:
-#ifdef USE_EMSCRIPTEN
+#ifdef USE_EMSCRIPTEN_OR_LIB
     /**
      * Experimental editor methods
      */
