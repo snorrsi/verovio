@@ -8,6 +8,7 @@
 #ifndef __VRV_CUSTOS_H__
 #define __VRV_CUSTOS_H__
 
+#include "accid.h"
 #include "atts_analytical.h"
 #include "atts_shared.h"
 #include "layerelement.h"
@@ -20,7 +21,7 @@ namespace vrv {
 // Custos
 //----------------------------------------------------------------------------
 
-class Custos : public LayerElement, public PitchInterface, public PositionInterface, public AttColor {
+class Custos : public LayerElement, public PitchInterface, public PositionInterface, public AttColor, public AttExtSym {
 public:
     /**
      * @name Constructors, destructors, and other standard methods
@@ -29,20 +30,30 @@ public:
     ///@{
     Custos();
     virtual ~Custos();
-    virtual void Reset();
-    virtual std::string GetClassName() const { return "Custos"; }
-    virtual ClassId GetClassId() const { return CUSTOS; }
+    Object *Clone() const override { return new Custos(*this); }
+    void Reset() override;
+    std::string GetClassName() const override { return "Custos"; }
     ///@}
 
     /**
      * @name Getter to interfaces
      */
     ///@{
-    virtual PitchInterface *GetPitchInterface() { return dynamic_cast<PitchInterface *>(this); }
+    PitchInterface *GetPitchInterface() override { return dynamic_cast<PitchInterface *>(this); }
     ///@}
 
     /** Override the method since alignment is required */
-    virtual bool HasToBeAligned() const { return true; }
+    bool HasToBeAligned() const override { return true; }
+
+    /**
+     * Add an accid to a custos.
+     */
+    bool IsSupportedChild(Object *object) override;
+
+    /**
+     * Return a SMuFL code for the custos
+     */
+    wchar_t GetCustosGlyph(const data_NOTATIONTYPE notationType) const;
 
     //----------//
     // Functors //
@@ -51,12 +62,12 @@ public:
     /**
      * See Object::ResetDrawing
      */
-    virtual int ResetDrawing(FunctorParams *functorParams);
+    int ResetDrawing(FunctorParams *functorParams) override;
 
     /**
      * See Object::ResetHorizontalAlignment
      */
-    virtual int ResetHorizontalAlignment(FunctorParams *functorParams);
+    int ResetHorizontalAlignment(FunctorParams *functorParams) override;
 
 private:
     //

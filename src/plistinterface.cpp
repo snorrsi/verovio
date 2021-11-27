@@ -13,7 +13,7 @@
 
 //----------------------------------------------------------------------------
 
-#include "attcomparison.h"
+#include "comparison.h"
 #include "functorparams.h"
 #include "layerelement.h"
 #include "measure.h"
@@ -90,7 +90,7 @@ void PlistInterface::SetUuidStrs()
 
 int PlistInterface::InterfacePreparePlist(FunctorParams *functorParams, Object *object)
 {
-    PreparePlistParams *params = dynamic_cast<PreparePlistParams *>(functorParams);
+    PreparePlistParams *params = vrv_params_cast<PreparePlistParams *>(functorParams);
     assert(params);
 
     // This should not happen?
@@ -102,7 +102,7 @@ int PlistInterface::InterfacePreparePlist(FunctorParams *functorParams, Object *
 
     std::vector<std::string>::iterator iter;
     for (iter = m_uuids.begin(); iter != m_uuids.end(); ++iter) {
-        params->m_interfaceUuidPairs.push_back(std::make_pair(this, *iter));
+        params->m_interfaceUuidPairs.push_back({ this, *iter });
     }
 
     return FUNCTOR_CONTINUE;

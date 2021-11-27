@@ -8,6 +8,7 @@
 #ifndef __VRV_CLEF_H__
 #define __VRV_CLEF_H__
 
+#include "atts_externalsymbols.h"
 #include "atts_shared.h"
 #include "layerelement.h"
 
@@ -25,8 +26,11 @@ class ScoreDefInterface;
 class Clef : public LayerElement,
              public AttClefShape,
              public AttColor,
+             public AttEnclosingChars,
+             public AttExtSym,
              public AttLineLoc,
-             public AttOctaveDisplacement {
+             public AttOctaveDisplacement,
+             public AttVisibility {
 public:
     /**
      * @name Constructors, destructors, and other standard methods
@@ -34,30 +38,47 @@ public:
      */
     ///@{
     Clef();
-    Clef(const ScoreDefInterface *clefAttr);
-    void Init();
     virtual ~Clef();
-    virtual void Reset();
-    virtual Object *Clone() const { return new Clef(*this); }
-    virtual std::string GetClassName() const { return "Clef"; }
-    virtual ClassId GetClassId() const { return CLEF; }
+    Object *Clone() const override { return new Clef(*this); }
+    void Reset() override;
+    std::string GetClassName() const override { return "Clef"; }
     ///@}
 
     /** Override the method since alignment is required */
-    virtual bool HasToBeAligned() const { return true; }
+    bool HasToBeAligned() const override { return true; }
+
+    /** Override the method since check is required */
+    bool IsScoreDefElement() const override { return (this->GetParent() && this->GetFirstAncestor(SCOREDEF)); }
 
     /**
      * Return the offset of the clef
      */
     int GetClefLocOffset() const;
 
+    //----------------//
+    // Static methods //
+    //----------------//
+
     /**
-     * Return a clef id based on the various parameters
+     * Retrieves the appropriate SMuFL code for a data_CLEFSHAPE
      */
-    static int ClefId(data_CLEFSHAPE shape, char line, data_OCTAVE_DIS octaveDis, data_STAFFREL_basic place);
+    wchar_t GetClefGlyph(const data_NOTATIONTYPE notationType) const;
+
+    //----------//
+    // Functors //
+    //----------//
+
+    /**
+     * See Object::AdjustBeams
+     */
+    int AdjustBeams(FunctorParams *functorParams) override;
+
+    /**
+     * See Object::AdjustClefChanges
+     */
+    int AdjustClefChanges(FunctorParams *functorParams) override;
 
 private:
-    //
 public:
     //
 private:

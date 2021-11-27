@@ -33,23 +33,23 @@ public:
      */
     ///@{
     FloatingObject();
-    FloatingObject(std::string classid);
+    FloatingObject(ClassId classId);
+    FloatingObject(ClassId classId, const std::string &classIdStr);
     virtual ~FloatingObject();
-    virtual void Reset();
-    virtual ClassId GetClassId() const { return FLOATING_OBJECT; }
+    void Reset() override;
     ///@}
 
-    virtual void UpdateContentBBoxX(int x1, int x2);
-    virtual void UpdateContentBBoxY(int y1, int y2);
-    virtual void UpdateSelfBBoxX(int x1, int x2);
-    virtual void UpdateSelfBBoxY(int y1, int y2);
+    void UpdateContentBBoxX(int x1, int x2) override;
+    void UpdateContentBBoxY(int y1, int y2) override;
+    void UpdateSelfBBoxX(int x1, int x2) override;
+    void UpdateSelfBBoxY(int y1, int y2) override;
 
     /**
      * @name Get and set the X and Y drawing position
      */
     ///@{
-    virtual int GetDrawingX() const;
-    virtual int GetDrawingY() const;
+    int GetDrawingX() const override;
+    int GetDrawingY() const override;
     ///@}
 
     void SetCurrentFloatingPositioner(FloatingPositioner *boundingBox);
@@ -71,6 +71,20 @@ public:
     int SetDrawingGrpObject(void *drawingGrpObject);
     ///@}
 
+    /**
+     * @name Get and set maximum drawing yRel that is persistent for the floating object across all its floating
+     * positioners, which allows for persisten vertical positioning for some elements
+     */
+    ///@{
+    void SetMaxDrawingYRel(int maxDrawingYRel);
+    int GetMaxDrawingYRel() const { return m_maxDrawingYRel; };
+    ///@}
+
+    /**
+     * Check whether current object represents initial element or extender lines
+     */
+    virtual bool IsExtenderElement() const { return false; }
+
     //----------//
     // Functors //
     //----------//
@@ -78,42 +92,42 @@ public:
     /**
      * See Object::ResetHorizontalAlignment
      */
-    virtual int ResetHorizontalAlignment(FunctorParams *functorParams);
+    int ResetHorizontalAlignment(FunctorParams *functorParams) override;
 
     /**
      * See Object::ResetVerticalAlignment
      */
-    virtual int ResetVerticalAlignment(FunctorParams *functorParams);
+    int ResetVerticalAlignment(FunctorParams *functorParams) override;
 
     /**
      * See Object::FillStaffCurrentTimeSpanning
      */
-    virtual int FillStaffCurrentTimeSpanning(FunctorParams *functorParams);
+    int FillStaffCurrentTimeSpanning(FunctorParams *functorParams) override;
 
     /**
      * See Object::PrepareTimePointing
      */
-    virtual int PrepareTimePointing(FunctorParams *functorParams);
+    int PrepareTimePointing(FunctorParams *functorParams) override;
 
     /**
      * See Object::PrepareTimeSpanning
      */
-    virtual int PrepareTimeSpanning(FunctorParams *functorParams);
+    int PrepareTimeSpanning(FunctorParams *functorParams) override;
 
     /**
      * See Object::PrepareTimestamps
      */
-    virtual int PrepareTimestamps(FunctorParams *functorParams);
+    int PrepareTimestamps(FunctorParams *functorParams) override;
 
     /**
      * See Object::ResetDrawing
      */
-    virtual int ResetDrawing(FunctorParams *functorParams);
+    int ResetDrawing(FunctorParams *functorParams) override;
 
     /**
      * See Object::UnCastOff
      */
-    virtual int UnCastOff(FunctorParams *functorParams);
+    int UnCastOff(FunctorParams *functorParams) override;
 
 private:
     //
@@ -125,13 +139,19 @@ private:
     /* Drawing Id to group floating elements horizontally */
     int m_drawingGrpId;
 
+    int m_maxDrawingYRel;
+
+    //----------------//
+    // Static members //
+    //----------------//
+
     /**
      * A vector for storing object / ids mapping.
      * When a group is created based on an object address, it is stack on the vector.
      * The ids of the group is then the position in the vector + GRPS_BASE_ID.
      * Groups coded in MEI have negative ids (-@vgrp value)
      */
-    static std::vector<void *> s_drawingObjectIds;
+    static thread_local std::vector<void *> s_drawingObjectIds;
 };
 
 //----------------------------------------------------------------------------
@@ -146,7 +166,7 @@ public:
     // constructors and destructors
     FloatingPositioner(FloatingObject *object, StaffAlignment *alignment, char spanningType);
     virtual ~FloatingPositioner(){};
-    virtual ClassId GetClassId() const { return FLOATING_POSITIONER; }
+    ClassId GetClassId() const override { return FLOATING_POSITIONER; }
 
     virtual void ResetPositioner();
 
@@ -154,12 +174,12 @@ public:
      * @name Get the X and Y drawing position
      */
     ///@{
-    virtual int GetDrawingX() const;
-    virtual int GetDrawingY() const;
+    int GetDrawingX() const override;
+    int GetDrawingY() const override;
     ///@}
 
-    virtual void ResetCachedDrawingX() const;
-    virtual void ResetCachedDrawingY() const;
+    void ResetCachedDrawingX() const override;
+    void ResetCachedDrawingY() const override;
 
     /**
      * @name Setter and getters for the objectX and Y
@@ -187,11 +207,9 @@ public:
 
     bool CalcDrawingYRel(Doc *doc, StaffAlignment *staffAlignment, BoundingBox *horizOverlapingBBox);
 
-    data_STAFFREL_basic GetDrawingPlace() const { return m_place; }
+    int GetSpaceBelow(Doc *doc, StaffAlignment *staffAlignment, BoundingBox *horizOverlapingBBox);
 
-    void UpdateCurvePosition(const Point points[4], float angle, int thickness, curvature_CURVEDIR curveDir);
-
-    int CalcXMinMaxY(const Point points[4]);
+    data_STAFFREL GetDrawingPlace() const { return m_place; }
 
     /**
      * @name Get and set the X and Y drawing relative position.
@@ -199,7 +217,7 @@ public:
      */
     ///@{
     int GetDrawingYRel() const { return m_drawingYRel; }
-    virtual void SetDrawingYRel(int drawingYRel);
+    virtual void SetDrawingYRel(int drawingYRel, bool force = false);
     int GetDrawingXRel() const { return m_drawingXRel; }
     virtual void SetDrawingXRel(int drawingXRel);
     ///@}
@@ -231,19 +249,146 @@ protected:
      */
     StaffAlignment *m_alignment;
 
-    data_STAFFREL_basic m_place;
+    data_STAFFREL m_place;
 
 public:
-    Point m_cuvrePoints[4];
-    float m_cuvreAngle;
-    int m_cuvreThickness;
-    curvature_CURVEDIR m_cuvreDir;
-    int m_cuvreXMinMaxY;
-
     /**
      * The spanning type of the positionner for spanning control elements
      */
     char m_spanningType;
+};
+
+//----------------------------------------------------------------------------
+// FloatingCurvePositioner
+//----------------------------------------------------------------------------
+
+/**
+ * This class represents a basic object for a curve (slur, tie) in the layout domain
+ */
+class FloatingCurvePositioner : public FloatingPositioner {
+public:
+    // constructors and destructors
+    FloatingCurvePositioner(FloatingObject *object, StaffAlignment *alignment, char spanningType);
+    virtual ~FloatingCurvePositioner();
+    ClassId GetClassId() const override { return FLOATING_CURVE_POSITIONER; }
+
+    void ResetPositioner() override;
+
+    /**
+     * Reset the curve parameters in FloatingCurvePositioner::FloatingCurvePositioner and in
+     * FloatingCurvePositioner::ResetPositioner
+     */
+    void ResetCurveParams();
+
+    /**
+     * Update the curve parameters.
+     * Stored points are made relative to the curve drawingY.
+     */
+    ///@{
+    void UpdateCurveParams(const Point points[4], float angle, int thickness, curvature_CURVEDIR curveDir);
+    void UpdatePoints(const BezierCurve &bezier);
+    ///@}
+
+    /**
+     * Moves bounding points vertically by a specified distance downward
+     */
+    void MoveFrontVertical(int distance);
+    void MoveBackVertical(int distance);
+
+    /**
+     * Calculate the min or max Y for a set of points
+     */
+    int CalcMinMaxY(const Point points[4]);
+
+    /**
+     * Calculate the adjustment needed for an element for the curve not to overlap with it.
+     * Discard will be true if the element already fits.
+     */
+    ///@{
+    int CalcAdjustment(BoundingBox *boundingBox, bool &discard, int margin = 0, bool horizontalOverlap = true);
+    // Refined version that returns the adjustments on the left and right hand side of the bounding box
+    std::pair<int, int> CalcLeftRightAdjustment(
+        BoundingBox *boundingBox, bool &discard, int margin = 0, bool horizontalOverlap = true);
+    ///@}
+
+    /**
+     * @name Getters for the current parameters
+     */
+    ///@{
+    void GetPoints(Point points[4]) const;
+    float GetAngle() { return m_angle; }
+    int GetThickness() { return m_thickness; }
+    curvature_CURVEDIR GetDir() { return m_dir; }
+    ///@}
+
+    /**
+     * Deletes all the CurveSpannedElement objects.
+     */
+    void ClearSpannedElements();
+
+    /**
+     * Add a CurveSpannedElement to the FloatingCurvePositioner.
+     * The element is owned by the positioner.
+     */
+    void AddSpannedElement(CurveSpannedElement *spannedElement) { m_spannedElements.push_back(spannedElement); }
+
+    /**
+     * Return a cont pointer to the spanned elements
+     */
+    const ArrayOfCurveSpannedElements *GetSpannedElements() { return &m_spannedElements; }
+
+    /**
+     * @name Getter, setter and checker for the crossStaff
+     */
+    ///@{
+    void SetCrossStaff(Staff *crossStaff) { m_crossStaff = crossStaff; }
+    Staff *GetCrossStaff() const { return m_crossStaff; }
+    bool IsCrossStaff() const { return m_crossStaff != NULL; }
+    ///@}
+
+private:
+    //
+public:
+    //
+private:
+    /**
+     * @name Current parameters.
+     * Points are relative to the curve current drawingY.
+     */
+    ///@{
+    Point m_points[4];
+    float m_angle;
+    int m_thickness;
+    curvature_CURVEDIR m_dir;
+    Staff *m_crossStaff;
+    ///@}
+
+    ArrayOfCurveSpannedElements m_spannedElements;
+
+    /** The cached min or max value (depending on the curvature) */
+    int m_cachedMinMaxY;
+};
+
+//----------------------------------------------------------------------------
+// CurveSpannedElement
+//----------------------------------------------------------------------------
+
+class CurveSpannedElement {
+public:
+    /**
+     * @name Constructors, destructors, and other standard methods
+     */
+    ///@{
+    CurveSpannedElement()
+    {
+        m_boundingBox = NULL;
+        m_discarded = false;
+    }
+    virtual ~CurveSpannedElement(){};
+
+    Point m_rotatedPoints[4];
+    BoundingBox *m_boundingBox;
+    bool m_discarded;
 };
 
 } // namespace vrv

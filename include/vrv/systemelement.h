@@ -30,10 +30,10 @@ public:
      */
     ///@{
     SystemElement();
-    SystemElement(std::string classid);
+    SystemElement(ClassId classId);
+    SystemElement(ClassId classId, const std::string &classIdStr);
     virtual ~SystemElement();
-    virtual void Reset();
-    virtual ClassId GetClassId() const { return SYSTEM_ELEMENT; }
+    void Reset() override;
     ///@}
 
     //----------//
@@ -43,27 +43,32 @@ public:
     /**
      * See Object::ConvertToPageBased
      */
-    virtual int ConvertToPageBased(FunctorParams *functorParams);
+    int ConvertToPageBased(FunctorParams *functorParams) override;
 
     /**
      * See Object::ConvertToCastOffMensural
      */
-    virtual int ConvertToCastOffMensural(FunctorParams *params);
+    int ConvertToCastOffMensural(FunctorParams *functorParams) override;
 
     /**
      * See Object::CastOffSystems
      */
-    virtual int CastOffSystems(FunctorParams *functorParams);
+    int CastOffSystems(FunctorParams *functorParams) override;
 
     /**
      * See Object::CastOffEncoding
      */
-    virtual int CastOffEncoding(FunctorParams *functorParams);
+    int CastOffEncoding(FunctorParams *functorParams) override;
 
 private:
     //
 public:
-    //
+    /**
+     * Holds the visibility (hidden or visible) for an system element.
+     * By default, a system element is visible. It can be hidden when expansion are processed.
+     */
+    VisibilityType m_visibility;
+
 private:
     //
 };

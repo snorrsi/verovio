@@ -31,7 +31,8 @@ namespace vrv {
 // RunningElement
 //----------------------------------------------------------------------------
 
-RunningElement::RunningElement() : Object("re"), ObjectListInterface(), AttHorizontalAlign(), AttTyped()
+RunningElement::RunningElement()
+    : Object(RUNNING_ELEMENT, "re"), ObjectListInterface(), AttHorizontalAlign(), AttTyped()
 {
     RegisterAttClass(ATT_HORIZONTALALIGN);
     RegisterAttClass(ATT_TYPED);
@@ -39,7 +40,17 @@ RunningElement::RunningElement() : Object("re"), ObjectListInterface(), AttHoriz
     Reset();
 }
 
-RunningElement::RunningElement(std::string classid) : Object(classid), AttHorizontalAlign(), AttTyped()
+RunningElement::RunningElement(ClassId classId)
+    : Object(classId, "re"), ObjectListInterface(), AttHorizontalAlign(), AttTyped()
+{
+    RegisterAttClass(ATT_HORIZONTALALIGN);
+    RegisterAttClass(ATT_TYPED);
+
+    Reset();
+}
+
+RunningElement::RunningElement(ClassId classId, const std::string &classIdStr)
+    : Object(classId, classIdStr), AttHorizontalAlign(), AttTyped()
 {
     RegisterAttClass(ATT_HORIZONTALALIGN);
     RegisterAttClass(ATT_TYPED);
@@ -66,7 +77,7 @@ void RunningElement::Reset()
     }
 }
 
-void RunningElement::AddChild(Object *child)
+bool RunningElement::IsSupportedChild(Object *child)
 {
     if (child->IsTextElement()) {
         assert(dynamic_cast<TextElement *>(child));
@@ -75,23 +86,19 @@ void RunningElement::AddChild(Object *child)
         assert(dynamic_cast<EditorialElement *>(child));
     }
     else {
-        LogError("Adding '%s' to a '%s'", child->GetClassName().c_str(), this->GetClassName().c_str());
-        assert(false);
+        return false;
     }
-
-    child->SetParent(this);
-    m_children.push_back(child);
-    Modify();
+    return true;
 }
 
-void RunningElement::FilterList(ListOfObjects *childList)
+void RunningElement::FilterList(ArrayOfObjects *childList)
 {
-    ListOfObjects::iterator iter = childList->begin();
+    ArrayOfObjects::iterator iter = childList->begin();
 
     while (iter != childList->end()) {
         // remove nested rend elements
         if ((*iter)->Is(REND)) {
-            if ((*iter)->GetFirstParent(REND)) {
+            if ((*iter)->GetFirstAncestor(REND)) {
                 iter = childList->erase(iter);
                 continue;
             }
@@ -117,7 +124,7 @@ void RunningElement::FilterList(ListOfObjects *childList)
         AreaPosInterface *interface = dynamic_cast<AreaPosInterface *>(*iter);
         assert(interface);
         pos = this->GetAlignmentPos(interface->GetHalign(), interface->GetValign());
-        TextElement *text = dynamic_cast<TextElement *>(*iter);
+        TextElement *text = vrv_cast<TextElement *>(*iter);
         assert(text);
         m_cells[pos].push_back(text);
     }
@@ -158,10 +165,10 @@ int RunningElement::GetWidth() const
 {
     if (!m_drawingPage) return 0;
 
-    Doc *doc = dynamic_cast<Doc *>(m_drawingPage->GetFirstParent(DOC));
+    Doc *doc = dynamic_cast<Doc *>(m_drawingPage->GetFirstAncestor(DOC));
     if (!doc) return 0;
 
-    return (doc->m_drawingPageWidth - doc->m_drawingPageMarginLeft - doc->m_drawingPageMarginRight);
+    return (doc->m_drawingPageContentWidth);
     // return m_drawingPage->GetContentWidth();
 }
 
@@ -333,10 +340,10 @@ void RunningElement::SetCurrentPageNum(Page *currentPage)
 
     int currentNum = currentPage->GetIdx() + 1;
 
-    Num *num = dynamic_cast<Num *>(this->FindChildByType(NUM));
+    Num *num = dynamic_cast<Num *>(this->FindDescendantByType(NUM));
     if (!num || (num->GetLabel() != "page")) return;
 
-    Text *text = dynamic_cast<Text *>(num->FindChildByType(TEXT));
+    Text *text = dynamic_cast<Text *>(num->FindDescendantByType(TEXT));
     if (!text || (text->GetText() != L"#")) return;
 
     Text *currentText = num->GetCurrentText();
@@ -406,7 +413,7 @@ int RunningElement::SaveEnd(FunctorParams *functorParams)
 
 int RunningElement::AlignVertically(FunctorParams *functorParams)
 {
-    AlignVerticallyParams *params = dynamic_cast<AlignVerticallyParams *>(functorParams);
+    AlignVerticallyParams *params = vrv_params_cast<AlignVerticallyParams *>(functorParams);
     assert(params);
 
     params->m_pageWidth = this->GetWidth();

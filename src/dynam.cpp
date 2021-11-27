@@ -10,12 +10,14 @@
 //----------------------------------------------------------------------------
 
 #include <assert.h>
+#include <sstream>
 
 //----------------------------------------------------------------------------
 
 #include "editorial.h"
 #include "functorparams.h"
 #include "hairpin.h"
+#include "rend.h"
 #include "smufl.h"
 #include "text.h"
 #include "verticalaligner.h"
@@ -31,17 +33,27 @@ std::wstring dynamSmufl[] = { L"\uE520", L"\uE521", L"\uE522", L"\uE523", L"\uE5
 // Dynam
 //----------------------------------------------------------------------------
 
+static const ClassRegistrar<Dynam> s_factory("dynam", DYNAM);
+
 Dynam::Dynam()
-    : ControlElement("dynam-")
+    : ControlElement(DYNAM, "dynam-")
     , TextListInterface()
     , TextDirInterface()
     , TimeSpanningInterface()
+    , AttEnclosingChars()
     , AttExtender()
+    , AttLineRendBase()
+    , AttMidiValue()
+    , AttMidiValue2()
     , AttVerticalGroup()
 {
     RegisterInterface(TextDirInterface::GetAttClasses(), TextDirInterface::IsInterface());
     RegisterInterface(TimeSpanningInterface::GetAttClasses(), TimeSpanningInterface::IsInterface());
+    RegisterAttClass(ATT_ENCLOSINGCHARS);
     RegisterAttClass(ATT_EXTENDER);
+    RegisterAttClass(ATT_LINERENDBASE);
+    RegisterAttClass(ATT_MIDIVALUE);
+    RegisterAttClass(ATT_MIDIVALUE2);
     RegisterAttClass(ATT_VERTICALGROUP);
 
     Reset();
@@ -54,33 +66,31 @@ void Dynam::Reset()
     ControlElement::Reset();
     TextDirInterface::Reset();
     TimeSpanningInterface::Reset();
+    ResetEnclosingChars();
     ResetExtender();
+    ResetLineRendBase();
     ResetVerticalGroup();
 }
 
-void Dynam::AddChild(Object *child)
+bool Dynam::IsSupportedChild(Object *child)
 {
-    if (child->Is({ REND, TEXT })) {
+    if (child->Is({ LB, REND, TEXT })) {
         assert(dynamic_cast<TextElement *>(child));
     }
     else if (child->IsEditorialElement()) {
         assert(dynamic_cast<EditorialElement *>(child));
     }
     else {
-        LogError("Adding '%s' to a '%s'", child->GetClassName().c_str(), this->GetClassName().c_str());
-        assert(false);
+        return false;
     }
-
-    child->SetParent(this);
-    m_children.push_back(child);
-    Modify();
+    return true;
 }
 
 bool Dynam::IsSymbolOnly()
 {
     m_symbolStr = L"";
     std::wstring str = this->GetText(this);
-    if (str.find_first_not_of(L"fpmrszn") == std::string::npos) {
+    if (Dynam::IsSymbolOnly(str)) {
         m_symbolStr = str;
         return true;
     }
@@ -89,72 +99,177 @@ bool Dynam::IsSymbolOnly()
 
 std::wstring Dynam::GetSymbolStr() const
 {
+    return Dynam::GetSymbolStr(m_symbolStr);
+}
+
+int Dynam::PrepareDynamEnclosure(FunctorParams *functoParams)
+{
+    if (this->HasEnclose()) {
+        std::wstring openElement, closeElement;
+        switch (this->GetEnclose()) {
+            case ENCLOSURE_brack: {
+                openElement.assign(L"[");
+                closeElement.assign(L"]");
+                break;
+            }
+            case ENCLOSURE_paren: {
+                openElement.assign(L"(");
+                closeElement.assign(L")");
+                break;
+            }
+            default: break;
+        }
+        // If both opening/closing element are set - add them to the start and end of the dynam. Apply normal fontstyle
+        // to both, so that brackets are not inclined
+        if (!openElement.empty() && !closeElement.empty()) {
+            Rend *open = new Rend();
+            Rend *close = new Rend();
+            // Add opening bracket to the start of the dynam
+            Text *leftBracket = new Text();
+            leftBracket->SetText(openElement);
+            open->AddChild(leftBracket);
+            open->SetParent(this);
+            open->SetFontstyle(FONTSTYLE_normal);
+            this->InsertChild(open, 0);
+            // Add closing bracket at the end
+            Text *rightBracket = new Text();
+            rightBracket->SetText(closeElement);
+            close->AddChild(rightBracket);
+            close->SetFontstyle(FONTSTYLE_normal);
+            this->AddChild(close);
+        }
+    }
+    return FUNCTOR_SIBLINGS;
+}
+
+//----------------------------------------------------------------------------
+// Static methods for Dynam
+//----------------------------------------------------------------------------
+
+bool Dynam::GetSymbolsInStr(std::wstring &str, ArrayOfStringDynamTypePairs &tokens)
+{
+    tokens.clear();
+
+    std::wistringstream iss(str);
+    std::wstring token;
+    std::wstring text;
+    bool hasSymbols = false;
+    while (std::getline(iss, token, L' ')) {
+        // if (token.size() == 0) continue;
+        if (Dynam::IsSymbolOnly(token)) {
+            hasSymbols = true;
+            if (tokens.size() > 0) {
+                // previous one is not a symbol, add a space to it
+                if (tokens.back().second == false) {
+                    tokens.back().first = tokens.back().first + L" ";
+                }
+                // previous one it also a symbol, add a space in between
+                else {
+                    tokens.push_back({ L" ", false });
+                }
+            }
+            // Add it in all cases
+            tokens.push_back({ token, true });
+        }
+        else {
+            if (tokens.size() > 0) {
+                // previous one is not a symbol, append token to it with a space
+                if (tokens.back().second == false) {
+                    tokens.back().first = tokens.back().first + L" " + token;
+                }
+                // previous one is not a symbol, add it separately but with a space
+                else {
+                    tokens.push_back({ L" " + token, false });
+                }
+            }
+            // First one, just add it
+            else {
+                tokens.push_back({ token, false });
+            }
+        }
+    }
+
+    return hasSymbols;
+}
+
+bool Dynam::IsSymbolOnly(const std::wstring &str)
+{
+    if (str.empty()) return false;
+
+    if (str.find_first_not_of(L"fpmrszn") == std::string::npos) {
+        return true;
+    }
+    return false;
+}
+
+std::wstring Dynam::GetSymbolStr(const std::wstring &str)
+{
     std::wstring dynam;
-    if (m_symbolStr == L"p")
+    if (str == L"p")
         dynam.push_back(SMUFL_E520_dynamicPiano);
-    else if (m_symbolStr == L"m")
+    else if (str == L"m")
         dynam.push_back(SMUFL_E521_dynamicMezzo);
-    else if (m_symbolStr == L"f")
+    else if (str == L"f")
         dynam.push_back(SMUFL_E522_dynamicForte);
-    else if (m_symbolStr == L"r")
+    else if (str == L"r")
         dynam.push_back(SMUFL_E523_dynamicRinforzando);
-    else if (m_symbolStr == L"s")
+    else if (str == L"s")
         dynam.push_back(SMUFL_E524_dynamicSforzando);
-    else if (m_symbolStr == L"z")
+    else if (str == L"z")
         dynam.push_back(SMUFL_E525_dynamicZ);
-    else if (m_symbolStr == L"n")
+    else if (str == L"n")
         dynam.push_back(SMUFL_E526_dynamicNiente);
-    else if (m_symbolStr == L"pppppp")
+    else if (str == L"pppppp")
         dynam.push_back(SMUFL_E527_dynamicPPPPPP);
-    else if (m_symbolStr == L"ppppp")
+    else if (str == L"ppppp")
         dynam.push_back(SMUFL_E528_dynamicPPPPP);
-    else if (m_symbolStr == L"pppp")
+    else if (str == L"pppp")
         dynam.push_back(SMUFL_E529_dynamicPPPP);
-    else if (m_symbolStr == L"ppp")
+    else if (str == L"ppp")
         dynam.push_back(SMUFL_E52A_dynamicPPP);
-    else if (m_symbolStr == L"pp")
+    else if (str == L"pp")
         dynam.push_back(SMUFL_E52B_dynamicPP);
-    else if (m_symbolStr == L"mp")
+    else if (str == L"mp")
         dynam.push_back(SMUFL_E52C_dynamicMP);
-    else if (m_symbolStr == L"mf")
+    else if (str == L"mf")
         dynam.push_back(SMUFL_E52D_dynamicMF);
-    else if (m_symbolStr == L"pf")
+    else if (str == L"pf")
         dynam.push_back(SMUFL_E52E_dynamicPF);
-    else if (m_symbolStr == L"ff")
+    else if (str == L"ff")
         dynam.push_back(SMUFL_E52F_dynamicFF);
-    else if (m_symbolStr == L"fff")
+    else if (str == L"fff")
         dynam.push_back(SMUFL_E530_dynamicFFF);
-    else if (m_symbolStr == L"ffff")
+    else if (str == L"ffff")
         dynam.push_back(SMUFL_E531_dynamicFFFF);
-    else if (m_symbolStr == L"fffff")
+    else if (str == L"fffff")
         dynam.push_back(SMUFL_E532_dynamicFFFFF);
-    else if (m_symbolStr == L"ffffff")
+    else if (str == L"ffffff")
         dynam.push_back(SMUFL_E533_dynamicFFFFFF);
-    else if (m_symbolStr == L"fp")
+    else if (str == L"fp")
         dynam.push_back(SMUFL_E534_dynamicFortePiano);
-    else if (m_symbolStr == L"fz")
+    else if (str == L"fz")
         dynam.push_back(SMUFL_E535_dynamicForzando);
-    else if (m_symbolStr == L"sf")
+    else if (str == L"sf")
         dynam.push_back(SMUFL_E536_dynamicSforzando1);
-    else if (m_symbolStr == L"sfp")
+    else if (str == L"sfp")
         dynam.push_back(SMUFL_E537_dynamicSforzandoPiano);
-    else if (m_symbolStr == L"sfpp")
+    else if (str == L"sfpp")
         dynam.push_back(SMUFL_E538_dynamicSforzandoPianissimo);
-    else if (m_symbolStr == L"sfz")
+    else if (str == L"sfz")
         dynam.push_back(SMUFL_E539_dynamicSforzato);
-    else if (m_symbolStr == L"sfzp")
+    else if (str == L"sfzp")
         dynam.push_back(SMUFL_E53A_dynamicSforzatoPiano);
-    else if (m_symbolStr == L"sffz")
+    else if (str == L"sffz")
         dynam.push_back(SMUFL_E53B_dynamicSforzatoFF);
-    else if (m_symbolStr == L"rf")
+    else if (str == L"rf")
         dynam.push_back(SMUFL_E53C_dynamicRinforzando1);
-    else if (m_symbolStr == L"rfz")
+    else if (str == L"rfz")
         dynam.push_back(SMUFL_E53D_dynamicRinforzando2);
 
     if (!dynam.empty()) return dynam;
 
     // Otherwise replace it letter by letter
-    dynam = m_symbolStr;
+    dynam = str;
     int i;
     std::wstring from, to;
     for (i = 0; i < DYNAM_CHARS; ++i) {
@@ -172,7 +287,7 @@ std::wstring Dynam::GetSymbolStr() const
 
 int Dynam::PrepareFloatingGrps(FunctorParams *functorParams)
 {
-    PrepareFloatingGrpsParams *params = dynamic_cast<PrepareFloatingGrpsParams *>(functorParams);
+    PrepareFloatingGrpsParams *params = vrv_params_cast<PrepareFloatingGrpsParams *>(functorParams);
     assert(params);
 
     if (this->HasVgrp()) {

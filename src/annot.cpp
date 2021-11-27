@@ -22,7 +22,9 @@ namespace vrv {
 // Annot
 //----------------------------------------------------------------------------
 
-Annot::Annot() : EditorialElement("annot-"), TextListInterface(), AttPlist(), AttSource()
+static const ClassRegistrar<Annot> s_factory("annot", ANNOT);
+
+Annot::Annot() : EditorialElement(ANNOT, "annot-"), TextListInterface(), AttPlist(), AttSource()
 {
     RegisterAttClass(ATT_PLIST);
     RegisterAttClass(ATT_SOURCE);
@@ -39,7 +41,7 @@ void Annot::Reset()
     ResetSource();
 }
 
-void Annot::AddChild(Object *child)
+bool Annot::IsSupportedChild(Object *child)
 {
     if (child->IsTextElement()) {
         assert(dynamic_cast<TextElement *>(child));
@@ -48,17 +50,13 @@ void Annot::AddChild(Object *child)
         assert(dynamic_cast<Annot *>(child));
     }
     else {
-        LogError("Adding '%s' to a '%s'", child->GetClassName().c_str(), this->GetClassName().c_str());
-        assert(false);
+        return false;
     }
-
-    child->SetParent(this);
-    m_children.push_back(child);
-    Modify();
+    return true;
 }
 
 //----------------------------------------------------------------------------
 // Functor methods
 //----------------------------------------------------------------------------
-    
+
 } // namespace vrv

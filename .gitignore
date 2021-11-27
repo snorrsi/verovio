@@ -1,10 +1,10 @@
 # xcode
+Verovio.xcodeproj
 Verovio.xccheckout
 Verovio.xcodeproj/project.xcworkspace/xcshareddata
 Verovio.xcodeproj/project.xcworkspace/xcuserdata
 Verovio.xcodeproj/xcuserdata/
 bin/
-build/
 
 # Qt Creator
 tools/CMakeLists.txt.user
@@ -15,6 +15,7 @@ doc/pae-tests.html
 
 # include file generated at compilation
 include/vrv/git_commit.h
+bindings/iOS/all.h
 
 # cmake build
 tools/CMakeCache.txt
@@ -30,12 +31,20 @@ tools/libverovio.so
 # emscripten build
 emscripten/data/
 emscripten/build/
+emscripten/CMakeFiles/
+emscripten/CMakeCache.txt
 
 # python build
 bindings/python/verovio_wrap.cpp
 bindings/python/verovio.pyc
 bindings/python/verovio.py
-bindings/python/_verovio.so
+bindings/python/_verovio*.so
+bindings/python/__pycache__/*
+bindings/python/CMakeCache.txt
+bindings/python/CMakeFiles/
+build
+dist
+verovio.egg-info
 
 # java build
 bindings/java/verovio_wrap.cxx
@@ -52,6 +61,11 @@ bindings/qt/build-library
 bindings/qt/build-demo
 *.pro.user
 
+# Android build
+bindings/android/obj
+bindings/android/libs
+bindings/qt/build-android
+
 # MacOS
 .DS_Store
 
@@ -63,3 +77,22 @@ emscripten/npm-dev/node_modules
 
 # VS Code files
 .vscode/settings.json
+main
+DerivedData
+verovio.wasm
+Makefile
+libverovio.bc
+cmake_install.cmake
+libverovio.a
+tools/.cmake
+tools/compile_commands.json
+
+# VS Studio files
+.vs/
+Debug/
+Release/
+*.vcxproj*
+*.sln
+
+# Fonts
+fonts/tmp/

@@ -13,6 +13,7 @@
 //----------------------------------------------------------------------------
 
 #include "atts_analytical.h"
+#include "atts_neumes.h"
 #include "atts_shared.h"
 #include "durationinterface.h"
 #include "layerelement.h"
@@ -34,7 +35,8 @@ class Nc : public LayerElement,
            public PitchInterface,
            public PositionInterface,
            public AttColor,
-           public AttIntervalMelodic {
+           public AttIntervalMelodic,
+           public AttNcForm {
 public:
     /**
      * @name Constructors, destructors, reset and class name methods
@@ -43,17 +45,17 @@ public:
     ///@{
     Nc();
     virtual ~Nc();
-    virtual void Reset();
-    virtual std::string GetClassName() const { return "Nc"; }
-    virtual ClassId GetClassId() const { return NC; }
+    Object *Clone() const override { return new Nc(*this); }
+    void Reset() override;
+    std::string GetClassName() const override { return "Nc"; }
     ///@}
 
     /**
      * @name Getter to interfaces
      */
     ///@{
-    virtual DurationInterface *GetDurationInterface() { return dynamic_cast<DurationInterface *>(this); }
-    virtual PitchInterface *GetPitchInterface() { return dynamic_cast<PitchInterface *>(this); }
+    DurationInterface *GetDurationInterface() override { return dynamic_cast<DurationInterface *>(this); }
+    PitchInterface *GetPitchInterface() override { return dynamic_cast<PitchInterface *>(this); }
     ///@}
 
 private:

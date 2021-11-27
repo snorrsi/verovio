@@ -9,13 +9,25 @@
 #define __VRV_DEF_H__
 
 #include <algorithm>
+#include <functional>
 #include <list>
 #include <map>
+#include <set>
 #include <vector>
 
 //----------------------------------------------------------------------------
 
 #include "attdef.h"
+
+//----------------------------------------------------------------------------
+
+#define _USE_MATH_DEFINES // needed by Windows for math constants like "M_PI"
+#include <math.h>
+
+// In case it is not defined before...
+#ifndef M_PI
+#define M_PI (3.14159265358979323846264338327950288)
+#endif
 
 namespace vrv {
 
@@ -23,13 +35,35 @@ namespace vrv {
 // Version
 //----------------------------------------------------------------------------
 
-#define VERSION_MAJOR 2
-#define VERSION_MINOR 1
+#define VERSION_MAJOR 3
+#define VERSION_MINOR 7
 #define VERSION_REVISION 0
 // Adds "-dev" in the version number - should be set to false for releases
-#define VERSION_DEV true
+#define VERSION_DEV false
 
-enum MEIVersion { MEI_UNDEFINED = 0, MEI_2013, MEI_3_0_0, MEI_4_0_0 };
+enum MEIVersion { MEI_UNDEFINED = 0, MEI_2013, MEI_3_0_0, MEI_4_0_0, MEI_4_0_1, MEI_5_0_0_dev };
+
+//----------------------------------------------------------------------------
+// Cast redefinition
+//----------------------------------------------------------------------------
+
+// Can be changed between static and dynamic for debug purposes
+#ifdef VRV_DYNAMIC_CAST
+// To be used for all cases where type is cheched through Object::m_type
+#define vrv_cast dynamic_cast
+// To be used for all FunctorParams casts within Functors
+#define vrv_params_cast dynamic_cast
+#else
+#define vrv_cast static_cast
+#define vrv_params_cast static_cast
+#endif
+
+//----------------------------------------------------------------------------
+// Default midi values
+//----------------------------------------------------------------------------
+
+#define MIDI_VELOCITY 90
+#define MIDI_TEMPO 120
 
 //----------------------------------------------------------------------------
 // Object defines
@@ -37,45 +71,51 @@ enum MEIVersion { MEI_UNDEFINED = 0, MEI_2013, MEI_3_0_0, MEI_4_0_0 };
 
 /**
  * The ClassIds are used to identify Object child classes through the Object::Is virtual method.
- * Each Object child class has to have its own id and has to override the GetClassId() method.
+ * Each Object child class has to have its own id which is stored in the member variable m_classId.
  * Base classes (e.g., LayerElement) that are never instanciated have boundary ids
  * used for checking if an Object is child of a base class. See for example
  * Object::IsLayerElement.
  */
-enum ClassId {
+enum ClassId : uint16_t {
     BOUNDING_BOX = 0, // Should not be instanciated as is
     OBJECT, // Should not be instanciated as is
     DEVICE_CONTEXT, // Should not be instanciated as is,
     FLOATING_OBJECT,
     FLOATING_POSITIONER,
+    FLOATING_CURVE_POSITIONER,
     // Ids for ungrouped objects
     ALIGNMENT,
     ALIGNMENT_REFERENCE,
     CLEF_ATTR,
+    COURSE,
     DOC,
+    FACSIMILE,
     FB,
+    GRPSYM,
     GRACE_ALIGNER,
     INSTRDEF,
     KEYSIG_ATTR,
     LABEL,
     LABELABBR,
     LAYER,
-    MDIV,
     MEASURE,
     MEASURE_ALIGNER,
     MENSUR_ATTR,
     METERSIG_ATTR,
+    METERSIGGRP,
     PAGE,
     PAGES,
-    SCORE,
     STAFF,
     STAFF_ALIGNMENT,
     STAFFGRP,
+    SURFACE,
     SVG,
     SYSTEM,
     SYSTEM_ALIGNER,
     SYSTEM_ALIGNMENT,
     TIMESTAMP_ALIGNER,
+    TUNING,
+    ZONE,
     // Ids for EditorialElement child classes
     EDITORIAL_ELEMENT,
     ABBR,
@@ -105,9 +145,15 @@ enum ClassId {
     PGHEAD,
     PGHEAD2,
     RUNNING_ELEMENT_max,
+    // Ids for PageElement child classes
+    PAGE_ELEMENT,
+    PAGE_ELEMENT_END,
+    MDIV,
+    SCORE,
+    PAGE_ELEMENT_max,
     // Ids for SystemElement child classes
     SYSTEM_ELEMENT,
-    BOUNDARY_END,
+    SYSTEM_ELEMENT_END,
     ENDING,
     EXPANSION,
     PB,
@@ -116,19 +162,26 @@ enum ClassId {
     SYSTEM_ELEMENT_max,
     // Ids for ControlElement child classes
     CONTROL_ELEMENT,
-    ANCHORED_TEXT,
+    ANCHOREDTEXT,
     ARPEG,
     BRACKETSPAN,
     BREATH,
+    CAESURA,
     DIR,
     DYNAM,
     FERMATA,
+    FING,
+    GLISS,
     HAIRPIN,
     HARM,
+    LV,
     MORDENT,
     MNUM,
     OCTAVE,
     PEDAL,
+    PHRASE,
+    PITCHINFLECTION,
+    REH,
     SLUR,
     TEMPO,
     TIE,
@@ -139,13 +192,9 @@ enum ClassId {
     LAYER_ELEMENT,
     ACCID,
     ARTIC,
-    ARTIC_PART,
     BARLINE,
-    BARLINE_ATTR_LEFT,
-    BARLINE_ATTR_RIGHT,
     BEAM,
     BEATRPT,
-    BRACKET,
     BTREM,
     CHORD,
     CLEF,
@@ -154,28 +203,35 @@ enum ClassId {
     DOTS,
     FLAG,
     FTREM,
+    GRACEGRP,
     HALFMRPT,
     KEYSIG,
+    KEYACCID,
     LIGATURE,
     MENSUR,
     METERSIG,
     MREST,
     MRPT,
     MRPT2,
+    MSPACE,
     MULTIREST,
     MULTIRPT,
     NC,
     NOTE,
     NEUME,
-    TUPLET_NUM,
+    PLICA,
     PROPORT,
     REST,
     SPACE,
     STEM,
     SYL,
     SYLLABLE,
+    TABGRP,
+    TABDURSYM,
     TIMESTAMP_ATTR,
     TUPLET,
+    TUPLET_BRACKET,
+    TUPLET_NUM,
     VERSE,
     LAYER_ELEMENT_max,
     // Ids for ScoreDefElement child classes
@@ -210,6 +266,7 @@ enum InterfaceId {
     INTERFACE_BOUNDARY,
     INTERFACE_DURATION,
     INTERFACE_LINKING,
+    INTERFACE_FACSIMILE,
     INTERFACE_PITCH,
     INTERFACE_PLIST,
     INTERFACE_POSITION,
@@ -225,10 +282,11 @@ enum InterfaceId {
 
 class Alignment;
 class Arpeg;
-class AttComparison;
+class ClassIdComparison;
 class BeamElementCoord;
 class BoundingBox;
 class Comparison;
+class CurveSpannedElement;
 class FloatingPositioner;
 class GraceAligner;
 class InterfaceComparison;
@@ -249,31 +307,31 @@ class TimeSpanningInterface;
 
 typedef std::vector<Object *> ArrayOfObjects;
 
-typedef std::vector<Object *> ListOfObjects;
+typedef std::list<Object *> ListOfObjects;
 
 typedef std::vector<Comparison *> ArrayOfComparisons;
 
 typedef std::vector<Note *> ChordCluster;
 
-typedef std::vector<std::tuple<Alignment *, Alignment *, int> > ArrayOfAdjustmentTuples;
+typedef std::vector<std::tuple<Alignment *, Alignment *, int>> ArrayOfAdjustmentTuples;
 
-typedef std::vector<std::tuple<Alignment *, Arpeg *, int, bool> > ArrayOfAligmentArpegTuples;
+typedef std::vector<std::tuple<Alignment *, Arpeg *, int, bool>> ArrayOfAlignmentArpegTuples;
 
 typedef std::vector<BeamElementCoord *> ArrayOfBeamElementCoords;
-    
-typedef std::vector<std::pair<int, int> > ArrayOfIntPairs;
 
-typedef std::vector<std::pair<LinkingInterface *, std::string> > ArrayOfLinkingInterfaceUuidPairs;
+typedef std::vector<std::pair<int, int>> ArrayOfIntPairs;
 
-typedef std::vector<std::pair<PlistInterface *, std::string> > ArrayOfPlistInterfaceUuidPairs;
+typedef std::multimap<std::string, LinkingInterface *> MapOfLinkingInterfaceUuidPairs;
 
-typedef std::vector<std::pair<LayerElement *, Point> > ArrayOfLayerElementPointPairs;
+typedef std::vector<std::pair<PlistInterface *, std::string>> ArrayOfPlistInterfaceUuidPairs;
 
-typedef std::vector<std::pair<Object *, data_MEASUREBEAT> > ArrayOfObjectBeatPairs;
+typedef std::vector<CurveSpannedElement *> ArrayOfCurveSpannedElements;
 
-typedef std::vector<std::pair<TimePointInterface *, ClassId> > ArrayOfPointingInterClassIdPairs;
+typedef std::list<std::pair<Object *, data_MEASUREBEAT>> ListOfObjectBeatPairs;
 
-typedef std::vector<std::pair<TimeSpanningInterface *, ClassId> > ArrayOfSpanningInterClassIdPairs;
+typedef std::list<std::pair<TimePointInterface *, ClassId>> ListOfPointingInterClassIdPairs;
+
+typedef std::list<std::pair<TimeSpanningInterface *, ClassId>> ListOfSpanningInterClassIdPairs;
 
 typedef std::vector<FloatingPositioner *> ArrayOfFloatingPositioners;
 
@@ -283,11 +341,23 @@ typedef std::vector<LedgerLine> ArrayOfLedgerLines;
 
 typedef std::vector<TextElement *> ArrayOfTextElements;
 
-typedef std::map<Staff *, std::list<int> > MapOfDotLocs;
+typedef std::map<Staff *, std::multiset<int>> MapOfNoteLocs;
+
+typedef std::map<Staff *, std::set<int>> MapOfDotLocs;
 
 typedef std::map<std::string, Option *> MapOfStrOptions;
 
+typedef std::map<data_PITCHNAME, data_ACCIDENTAL_WRITTEN> MapOfPitchAccid;
+
 typedef std::map<int, GraceAligner *> MapOfIntGraceAligners;
+
+typedef std::vector<std::pair<std::wstring, bool>> ArrayOfStringDynamTypePairs;
+
+typedef std::map<std::string, std::function<Object *(void)>> MapOfStrConstructors;
+
+typedef std::map<std::string, ClassId> MapOfStrClassIds;
+
+typedef bool (*NotePredicate)(Note *);
 
 /**
  * Generic int map recursive structure for storing hierachy of values
@@ -353,6 +423,9 @@ enum FunctorCode { FUNCTOR_CONTINUE = 0, FUNCTOR_SIBLINGS, FUNCTOR_STOP };
 /** Define the maximum levels between a ligature and its notes **/
 #define MAX_LIGATURE_DEPTH -1
 
+/** Define the maximum levels between a tabGrp and its children **/
+#define MAX_TABGRP_DEPTH -1
+
 /** Define the maximum levels between a tuplet and its notes **/
 #define MAX_TUPLET_DEPTH -1
 
@@ -376,10 +449,25 @@ enum FunctorCode { FUNCTOR_CONTINUE = 0, FUNCTOR_SIBLINGS, FUNCTOR_STOP };
 #define VRV_TEXT_E551 0xE551
 #define VRV_TEXT_E552 0xE552
 
+/**
+ * SMUFL Symbols used in figured bass included in VerovioText
+ * Text accidentals (266D to 266F)
+ * SMuFL accidentals (E260 to E264)
+ * SMuFL figured-bass figures (EA50 to EA62)
+ * SMuFL figured-bass supplement (ECC0)
+ */
+
+#define VRV_TEXT_HARM                                                                                                  \
+    L"\u266D\u266E\u266F"                                                                                              \
+    L"\uE260\uE261\uE262\uE263\uE264"                                                                                  \
+    L"\uEA50\uEA51\uEA52\uEA53\uEA54\uEA55\uEA56\uEA57\uEA58\uEA59\uEA5A\uEA5B\uEA5C\uEA5D\uEA5E"                      \
+    L"\uEA5F\uEA60\uEA61\uEA62"                                                                                        \
+    L"\uECC0"
+
 //----------------------------------------------------------------------------
 // data.LINEWIDTHTERM factors
 //----------------------------------------------------------------------------
-    
+
 #define LINEWIDTHTERM_factor_narrow 0.5
 #define LINEWIDTHTERM_factor_medium 2.0
 #define LINEWIDTHTERM_factor_wide 4.0
@@ -440,10 +528,10 @@ enum { SPANNING_START_END = 0, SPANNING_START, SPANNING_END, SPANNING_MIDDLE };
 enum ElementScoreDefRole { SCOREDEF_NONE = 0, SCOREDEF_SYSTEM, SCOREDEF_INTERMEDIATE, SCOREDEF_CAUTIONARY };
 
 //----------------------------------------------------------------------------
-// Artic part types
+// Artic types
 //----------------------------------------------------------------------------
 
-enum ArticPartType { ARTIC_PART_INSIDE = 0, ARTIC_PART_OUTSIDE };
+enum ArticType { ARTIC_INSIDE = 0, ARTIC_OUTSIDE };
 
 //----------------------------------------------------------------------------
 // Visibility optimization
@@ -468,6 +556,50 @@ enum {
 };
 
 //----------------------------------------------------------------------------
+// Ligature shape bitfields
+//----------------------------------------------------------------------------
+
+enum {
+    LIGATURE_DEFAULT = 0,
+    LIGATURE_STEM_LEFT_UP = 1,
+    LIGATURE_STEM_LEFT_DOWN = 2,
+    LIGATURE_STEM_RIGHT_UP = 4,
+    LIGATURE_STEM_RIGHT_DOWN = 8,
+    LIGATURE_OBLIQUE = 16,
+    LIGATURE_STACKED = 32
+};
+
+//----------------------------------------------------------------------------
+// Analytical markup bitfields
+//----------------------------------------------------------------------------
+
+enum {
+    MARKUP_DEFAULT = 0,
+    MARKUP_ANALYTICAL_TIE = 1,
+    MARKUP_ANALYTICAL_FERMATA = 2,
+    MARKUP_GRACE_ATTRIBUTE = 4,
+    MARKUP_ARTIC_MULTIVAL = 8
+};
+
+//----------------------------------------------------------------------------
+// Layout information
+//----------------------------------------------------------------------------
+
+enum LayoutInformation { LAYOUT_NONE = 0, LAYOUT_ENCODED, LAYOUT_DONE };
+
+//----------------------------------------------------------------------------
+// Bounding box access
+//----------------------------------------------------------------------------
+
+enum Accessor { SELF = 0, CONTENT };
+
+//----------------------------------------------------------------------------
+// Some keys
+//----------------------------------------------------------------------------
+
+enum { KEY_LEFT = 37, KEY_UP = 38, KEY_RIGHT = 39, KEY_DOWN = 40 };
+
+//----------------------------------------------------------------------------
 // Legacy Wolfgang defines
 //----------------------------------------------------------------------------
 
@@ -475,6 +607,16 @@ enum {
 
 // in half staff spaces (but should be 6 in two-voice notation)
 #define STANDARD_STEMLENGTH 7
+
+//----------------------------------------------------------------------------
+// Temporary - to be made an option?
+//----------------------------------------------------------------------------
+
+#define TABLATURE_STAFF_RATIO 1.3
+
+#define SUPER_SCRIPT_FACTOR 0.58
+#define SUPER_SCRIPT_POSITION -0.20 // lowered down from the midline
+#define SUB_SCRIPT_POSITION -0.17 // lowered down from the baseline
 
 } // namespace vrv
 

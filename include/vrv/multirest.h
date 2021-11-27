@@ -9,8 +9,10 @@
 #define __VRV_MULTIREST_H__
 
 #include "atts_cmn.h"
+#include "atts_shared.h"
 #include "atts_visual.h"
 #include "layerelement.h"
+#include "positioninterface.h"
 
 namespace vrv {
 
@@ -21,7 +23,13 @@ namespace vrv {
 /**
  * This class models the MEI <multiRest> element.
  */
-class MultiRest : public LayerElement, public AttMultiRestVis, public AttNumbered {
+class MultiRest : public LayerElement,
+                  public PositionInterface,
+                  public AttColor,
+                  public AttMultiRestVis,
+                  public AttNumbered,
+                  public AttNumberPlacement,
+                  public AttWidth {
 public:
     /**
      * @name Constructors, destructors, reset and class name methods
@@ -29,12 +37,16 @@ public:
      */
     ///@{
     MultiRest();
-    // MultiRest(int number);
     virtual ~MultiRest();
-    virtual void Reset();
-    virtual std::string GetClassName() const { return "MultiRest"; }
-    virtual ClassId GetClassId() const { return MULTIREST; }
+    Object *Clone() const override { return new MultiRest(*this); }
+    void Reset() override;
+    std::string GetClassName() const override { return "MultiRest"; }
     ///@}
+
+    /**
+     * True if block style rendering applies
+     */
+    bool UseBlockStyle(Doc *doc) const;
 
 private:
     //

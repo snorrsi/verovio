@@ -17,7 +17,9 @@
 #include "instrdef.h"
 #include "label.h"
 #include "labelabbr.h"
+#include "metersiggrp.h"
 #include "staffgrp.h"
+#include "tuning.h"
 #include "vrv.h"
 
 namespace vrv {
@@ -26,14 +28,18 @@ namespace vrv {
 // StaffDef
 //----------------------------------------------------------------------------
 
+static const ClassRegistrar<StaffDef> s_factory("staffDef", STAFFDEF);
+
 StaffDef::StaffDef()
-    : ScoreDefElement("staffdef-")
+    : ScoreDefElement(STAFFDEF, "staffdef-")
     , AttDistances()
     , AttLabelled()
     , AttNInteger()
     , AttNotationType()
     , AttScalable()
     , AttStaffDefLog()
+    , AttStaffDefVis()
+    , AttTimeBase()
     , AttTransposition()
 {
     RegisterAttClass(ATT_DISTANCES);
@@ -42,6 +48,8 @@ StaffDef::StaffDef()
     RegisterAttClass(ATT_NOTATIONTYPE);
     RegisterAttClass(ATT_SCALABLE);
     RegisterAttClass(ATT_STAFFDEFLOG);
+    RegisterAttClass(ATT_STAFFDEFVIS);
+    RegisterAttClass(ATT_TIMEBASE);
     RegisterAttClass(ATT_TRANSPOSITION);
 
     Reset();
@@ -59,15 +67,23 @@ void StaffDef::Reset()
     ResetNotationType();
     ResetScalable();
     ResetStaffDefLog();
+    ResetStaffDefVis();
+    ResetTimeBase();
     ResetTransposition();
 
     m_drawingVisibility = OPTIMIZATION_NONE;
 }
 
-void StaffDef::AddChild(Object *child)
+bool StaffDef::IsSupportedChild(Object *child)
 {
-    if (child->Is(INSTRDEF)) {
+    if (child->Is(CLEF)) {
+        assert(dynamic_cast<Clef *>(child));
+    }
+    else if (child->Is(INSTRDEF)) {
         assert(dynamic_cast<InstrDef *>(child));
+    }
+    else if (child->Is(KEYSIG)) {
+        assert(dynamic_cast<KeySig *>(child));
     }
     else if (child->Is(LABEL)) {
         assert(dynamic_cast<Label *>(child));
@@ -75,24 +91,19 @@ void StaffDef::AddChild(Object *child)
     else if (child->Is(LABELABBR)) {
         assert(dynamic_cast<LabelAbbr *>(child));
     }
+    else if (child->Is(MENSUR)) {
+        assert(dynamic_cast<Mensur *>(child));
+    }
+    else if (child->Is(METERSIG)) {
+        assert(dynamic_cast<MeterSig *>(child));
+    }
+    else if (child->Is(METERSIGGRP)) {
+        assert(dynamic_cast<MeterSigGrp *>(child));
+    }
+    else if (child->Is(TUNING)) {
+        assert(dynamic_cast<Tuning *>(child));
+    }
     else {
-        LogError("Adding '%s' to a '%s'", child->GetClassName().c_str(), this->GetClassName().c_str());
-        assert(false);
-    }
-
-    child->SetParent(this);
-    m_children.push_back(child);
-    Modify();
-}
-    
-bool StaffDef::IsInBraceAndBracket()
-{
-    StaffGrp *staffGrp1 = dynamic_cast<StaffGrp*>(this->GetFirstParent(STAFFGRP));
-    if (!staffGrp1 || !staffGrp1->HasSymbol()) {
-        return false;
-    }
-    StaffGrp *staffGrp2 = dynamic_cast<StaffGrp*>(staffGrp1->GetFirstParent(STAFFGRP));
-    if (!staffGrp2 || !staffGrp2->HasSymbol()) {
         return false;
     }
     return true;
@@ -104,7 +115,8 @@ bool StaffDef::IsInBraceAndBracket()
 
 int StaffDef::ReplaceDrawingValuesInStaffDef(FunctorParams *functorParams)
 {
-    ReplaceDrawingValuesInStaffDefParams *params = dynamic_cast<ReplaceDrawingValuesInStaffDefParams *>(functorParams);
+    ReplaceDrawingValuesInStaffDefParams *params
+        = vrv_params_cast<ReplaceDrawingValuesInStaffDefParams *>(functorParams);
     assert(params);
 
     if (params->m_clef) {
@@ -119,26 +131,38 @@ int StaffDef::ReplaceDrawingValuesInStaffDef(FunctorParams *functorParams)
     if (params->m_meterSig) {
         this->SetCurrentMeterSig(params->m_meterSig);
     }
+    if (params->m_meterSigGrp) {
+        this->SetCurrentMeterSigGrp(params->m_meterSigGrp);
+    }
 
     return FUNCTOR_CONTINUE;
 }
 
 int StaffDef::SetStaffDefRedrawFlags(FunctorParams *functorParams)
 {
-    SetStaffDefRedrawFlagsParams *params = dynamic_cast<SetStaffDefRedrawFlagsParams *>(functorParams);
+    SetStaffDefRedrawFlagsParams *params = vrv_params_cast<SetStaffDefRedrawFlagsParams *>(functorParams);
     assert(params);
 
-    if (params->m_clef || params->m_applyToAll) {
-        this->SetDrawClef(params->m_clef);
+    const bool forceRedraw = params->m_redrawFlags & StaffDefRedrawFlags::FORCE_REDRAW;
+    const bool redrawClef = params->m_redrawFlags & StaffDefRedrawFlags::REDRAW_CLEF;
+    if (redrawClef || forceRedraw) {
+        this->SetDrawClef(redrawClef);
     }
-    if (params->m_keySig || params->m_applyToAll) {
-        this->SetDrawKeySig(params->m_keySig);
+    const bool redrawKeySig = params->m_redrawFlags & StaffDefRedrawFlags::REDRAW_KEYSIG;
+    if (redrawKeySig || forceRedraw) {
+        this->SetDrawKeySig(redrawKeySig);
     }
-    if (params->m_mensur || params->m_applyToAll) {
-        this->SetDrawMensur(params->m_mensur);
+    const bool redrawMensur = params->m_redrawFlags & StaffDefRedrawFlags::REDRAW_MENSUR;
+    if (redrawMensur || forceRedraw) {
+        this->SetDrawMensur(redrawMensur);
     }
-    if (params->m_meterSig || params->m_applyToAll) {
-        this->SetDrawMeterSig(params->m_meterSig);
+    const bool redrawMeterSig = params->m_redrawFlags & StaffDefRedrawFlags::REDRAW_METERSIG;
+    if (redrawMeterSig || forceRedraw) {
+        this->SetDrawMeterSig(redrawMeterSig);
+    }
+    const bool redrawMeterSigGrp = params->m_redrawFlags & StaffDefRedrawFlags::REDRAW_METERSIGGRP;
+    if (redrawMeterSigGrp || forceRedraw) {
+        this->SetDrawMeterSigGrp(redrawMeterSigGrp);
     }
 
     return FUNCTOR_CONTINUE;

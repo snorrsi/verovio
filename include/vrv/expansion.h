@@ -32,10 +32,17 @@ public:
     ///@{
     Expansion();
     virtual ~Expansion();
-    virtual void Reset();
-    virtual std::string GetClassName() const { return "Expansion"; }
-    virtual ClassId GetClassId() const { return EXPANSION; }
+    Object *Clone() const override { return new Expansion(*this); }
+    void Reset() override;
+    std::string GetClassName() const override { return "Expansion"; }
     ///@}
+
+    /**
+     * @name Getter to interfaces
+     */
+    ///@{
+    PlistInterface *GetPlistInterface() override { return dynamic_cast<PlistInterface *>(this); }
+    ////@}
 
     //----------//
     // Functors //

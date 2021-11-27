@@ -27,7 +27,9 @@ namespace vrv {
 // Ending
 //----------------------------------------------------------------------------
 
-Ending::Ending() : SystemElement("ending-"), BoundaryStartInterface(), AttLineRend(), AttNNumberLike()
+static const ClassRegistrar<Ending> s_factory("ending", ENDING);
+
+Ending::Ending() : SystemElement(ENDING, "ending-"), SystemElementStartInterface(), AttLineRend(), AttNNumberLike()
 {
     RegisterAttClass(ATT_LINEREND);
     RegisterAttClass(ATT_NINTEGER);
@@ -40,12 +42,12 @@ Ending::~Ending() {}
 void Ending::Reset()
 {
     SystemElement::Reset();
-    BoundaryStartInterface::Reset();
+    SystemElementStartInterface::Reset();
     ResetLineRend();
     ResetNNumberLike();
 }
 
-void Ending::AddChild(Object *child)
+bool Ending::IsSupportedChild(Object *child)
 {
     if (child->Is(MEASURE)) {
         assert(dynamic_cast<Measure *>(child));
@@ -55,23 +57,18 @@ void Ending::AddChild(Object *child)
     }
     else if (child->IsSystemElement()) {
         assert(dynamic_cast<SystemElement *>(child));
-        // here we are actually allowing ending withing ending, which is wrong
+        // here we are actually allowing ending within ending, which is wrong
         if (child->Is(ENDING)) {
-            LogError("Adding '%s' to a '%s'", child->GetClassName().c_str(), this->GetClassName().c_str());
-            assert(false);
+            return false;
         }
     }
     else if (child->IsEditorialElement()) {
         assert(dynamic_cast<EditorialElement *>(child));
     }
     else {
-        LogError("Adding '%s' to a '%s'", child->GetClassName().c_str(), this->GetClassName().c_str());
-        assert(false);
+        return false;
     }
-
-    child->SetParent(this);
-    m_children.push_back(child);
-    Modify();
+    return true;
 }
 
 //----------------------------------------------------------------------------
@@ -80,33 +77,34 @@ void Ending::AddChild(Object *child)
 
 int Ending::ConvertToPageBased(FunctorParams *functorParams)
 {
-    ConvertToPageBasedParams *params = dynamic_cast<ConvertToPageBasedParams *>(functorParams);
+    ConvertToPageBasedParams *params = vrv_params_cast<ConvertToPageBasedParams *>(functorParams);
     assert(params);
 
-    this->MoveItselfTo(params->m_pageBasedSystem);
+    assert(params->m_currentSystem);
+    this->MoveItselfTo(params->m_currentSystem);
 
     return FUNCTOR_CONTINUE;
 }
 
 int Ending::ConvertToPageBasedEnd(FunctorParams *functorParams)
 {
-    ConvertToPageBasedParams *params = dynamic_cast<ConvertToPageBasedParams *>(functorParams);
+    ConvertToPageBasedParams *params = vrv_params_cast<ConvertToPageBasedParams *>(functorParams);
     assert(params);
 
-    ConvertToPageBasedBoundary(this, params->m_pageBasedSystem);
+    ConvertToPageBasedBoundary(this, params->m_currentSystem);
 
     return FUNCTOR_CONTINUE;
 }
 
 int Ending::PrepareBoundaries(FunctorParams *functorParams)
 {
-    PrepareBoundariesParams *params = dynamic_cast<PrepareBoundariesParams *>(functorParams);
+    PrepareBoundariesParams *params = vrv_params_cast<PrepareBoundariesParams *>(functorParams);
     assert(params);
 
-    // Endings should always have an BoundaryEnd
-    assert(this->IsBoundary());
+    // Endings should always have an SystemElementEnd
+    assert(this->IsSystemBoundary());
 
-    this->BoundaryStartInterface::InterfacePrepareBoundaries(functorParams);
+    this->SystemElementStartInterface::InterfacePrepareBoundaries(functorParams);
 
     params->m_currentEnding = this;
 
@@ -117,14 +115,14 @@ int Ending::ResetDrawing(FunctorParams *functorParams)
 {
     FloatingObject::ResetDrawing(functorParams);
 
-    this->BoundaryStartInterface::InterfaceResetDrawing(functorParams);
+    this->SystemElementStartInterface::InterfaceResetDrawing(functorParams);
 
     return FUNCTOR_CONTINUE;
 }
 
 int Ending::CastOffSystems(FunctorParams *functorParams)
 {
-    CastOffSystemsParams *params = dynamic_cast<CastOffSystemsParams *>(functorParams);
+    CastOffSystemsParams *params = vrv_params_cast<CastOffSystemsParams *>(functorParams);
     assert(params);
 
     // Since the functor returns FUNCTOR_SIBLINGS we should never go lower than the system children
@@ -136,14 +134,14 @@ int Ending::CastOffSystems(FunctorParams *functorParams)
     // the ownership of the Measure - the contentSystem will be deleted afterwards.
     Ending *ending = dynamic_cast<Ending *>(params->m_contentSystem->Relinquish(this->GetIdx()));
     // move as pending since we want it at the beginning of the system in case of system break coming
-    params->m_pendingObjects.push_back(ending);
+    params->m_pendingElements.push_back(ending);
 
     return FUNCTOR_SIBLINGS;
 }
 
 int Ending::CastOffEncoding(FunctorParams *functorParams)
 {
-    CastOffEncodingParams *params = dynamic_cast<CastOffEncodingParams *>(functorParams);
+    CastOffEncodingParams *params = vrv_params_cast<CastOffEncodingParams *>(functorParams);
     assert(params);
 
     MoveItselfTo(params->m_currentSystem);
@@ -153,7 +151,7 @@ int Ending::CastOffEncoding(FunctorParams *functorParams)
 
 int Ending::PrepareFloatingGrps(FunctorParams *functorParams)
 {
-    PrepareFloatingGrpsParams *params = dynamic_cast<PrepareFloatingGrpsParams *>(functorParams);
+    PrepareFloatingGrpsParams *params = vrv_params_cast<PrepareFloatingGrpsParams *>(functorParams);
     assert(params);
 
     if (params->m_previousEnding) {

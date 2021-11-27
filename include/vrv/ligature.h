@@ -25,7 +25,7 @@ namespace vrv {
  * It contains notes.
  */
 
-class Ligature : public LayerElement, public ObjectListInterface, public AttLigatureLog {
+class Ligature : public LayerElement, public ObjectListInterface, public AttLigatureVis {
 public:
     /**
      * @name Constructors, destructors, reset and class name methods
@@ -34,31 +34,33 @@ public:
     ///@{
     Ligature();
     virtual ~Ligature();
-    virtual void Reset();
-    virtual std::string GetClassName() const { return "Ligature"; }
-    virtual ClassId GetClassId() const { return LIGATURE; }
+    Object *Clone() const override { return new Ligature(*this); }
+    void Reset() override;
+    std::string GetClassName() const override { return "Ligature"; }
     ///@}
 
     /** Override the method since alignment is required */
-    virtual bool HasToBeAligned() const { return true; }
+    bool HasToBeAligned() const override { return true; }
 
     /**
      * Add children (notes or editorial markup)
      */
-    virtual void AddChild(Object *object);
+    bool IsSupportedChild(Object *object) override;
 
     /**
-     * Return information about the note's position in the ligature
-     * Assume that the note is in the ligature and does not check for that.
-     */
-    int PositionInLigature(Note *note);
-
-    /**
-     * @name Return the first and last note in the ligature (NULL if empty)
+     * Return the first or last note
      */
     ///@{
     Note *GetFirstNote();
     Note *GetLastNote();
+    ///@}
+
+    /**
+     * @name Return shape information about the note ligature
+     */
+    ///@{
+    int GetDrawingNoteShape(Note *note);
+    int GetDrawingPreviousNoteShape(Note *note);
     ///@}
 
     //----------//
@@ -66,9 +68,14 @@ public:
     //----------//
 
     /**
+     * See Object::CalcLigatureNotePos
+     */
+    int CalcLigatureNotePos(FunctorParams *functorParams) override;
+
+    /**
      * See Object::ResetDrawing
      */
-    virtual int ResetDrawing(FunctorParams *functorParams);
+    int ResetDrawing(FunctorParams *functorParams) override;
 
 protected:
     /**
@@ -79,9 +86,13 @@ protected:
     /**
      * Filter the flat list and keep only Note elements.
      */
-    virtual void FilterList(ListOfObjects *childlist);
+    void FilterList(ArrayOfObjects *childList) override;
 
 public:
+    /**
+     *
+     */
+    std::vector<int> m_drawingShapes;
 };
 
 } // namespace vrv

@@ -14,6 +14,8 @@
 //----------------------------------------------------------------------------
 
 #include "chord.h"
+#include "clef.h"
+#include "custos.h"
 #include "layer.h"
 #include "note.h"
 #include "rest.h"
@@ -56,18 +58,6 @@ bool PitchInterface::HasIdenticalPitchInterface(PitchInterface *otherPitchInterf
     */
 }
 
-void PitchInterface::AdjustPname(int &pname, int &oct)
-{
-    if (pname < PITCHNAME_c) {
-        if (oct > 0) oct--;
-        pname = PITCHNAME_b;
-    }
-    else if (pname > PITCHNAME_b) {
-        if (oct < 7) oct++;
-        pname = PITCHNAME_c;
-    }
-}
-
 void PitchInterface::AdjustPitchByOffset(int pitchOffset)
 {
     int pname = this->GetPname() + pitchOffset;
@@ -108,27 +98,71 @@ int PitchInterface::PitchDifferenceTo(PitchInterface *pi)
     return pitchDifference;
 }
 
+void PitchInterface::AdjustPitchForNewClef(Clef *oldClef, Clef *newClef)
+{
+    assert(oldClef);
+    assert(newClef);
+
+    int pitchDiff = -2 * (newClef->GetLine() - oldClef->GetLine());
+    if (oldClef->GetShape() == CLEFSHAPE_F) {
+        pitchDiff -= 3;
+    }
+    else if (oldClef->GetShape() == CLEFSHAPE_G) {
+        pitchDiff -= 4;
+    }
+    if (newClef->GetShape() == CLEFSHAPE_F) {
+        pitchDiff += 3;
+    }
+    else if (newClef->GetShape() == CLEFSHAPE_G) {
+        pitchDiff += 4;
+    }
+
+    this->AdjustPitchByOffset(pitchDiff);
+}
+
 //----------------------------------------------------------------------------
-// Static methods
+// Static methods for PitchInterface
 //----------------------------------------------------------------------------
 
-int PitchInterface::CalcLoc(LayerElement *layerElement, Layer *layer, bool topChordNote)
+void PitchInterface::AdjustPname(int &pname, int &oct)
+{
+    if (pname < PITCHNAME_c) {
+        if (oct > 0) oct--;
+        pname = PITCHNAME_b;
+    }
+    else if (pname > PITCHNAME_b) {
+        if (oct < 7) oct++;
+        pname = PITCHNAME_c;
+    }
+}
+
+int PitchInterface::CalcLoc(
+    LayerElement *layerElement, Layer *layer, LayerElement *crossStaffElement, bool topChordNote)
 {
     assert(layerElement);
 
     if (layerElement->Is(CHORD)) {
-        Chord *chord = dynamic_cast<Chord *>(layerElement);
+        Chord *chord = vrv_cast<Chord *>(layerElement);
         assert(chord);
         Note *note = (topChordNote) ? chord->GetTopNote() : chord->GetBottomNote();
-        return CalcLoc(note, layer);
+        return CalcLoc(note, layer, crossStaffElement);
     }
     else if (layerElement->Is(NOTE)) {
-        Note *note = dynamic_cast<Note *>(layerElement);
+        Note *note = vrv_cast<Note *>(layerElement);
         assert(note);
         if (note->HasLoc()) {
             return note->GetLoc();
         }
-        return PitchInterface::CalcLoc(note->GetPname(), note->GetOct(), layer->GetClefLocOffset(layerElement));
+        return PitchInterface::CalcLoc(note->GetPname(), note->GetOct(), layer->GetClefLocOffset(crossStaffElement));
+    }
+    else if (layerElement->Is(CUSTOS)) {
+        Custos *custos = vrv_cast<Custos *>(layerElement);
+        assert(custos);
+        if (custos->HasLoc()) {
+            return custos->GetLoc();
+        }
+        return PitchInterface::CalcLoc(
+            custos->GetPname(), custos->GetOct(), layer->GetClefLocOffset(crossStaffElement));
     }
     else {
         assert(false);

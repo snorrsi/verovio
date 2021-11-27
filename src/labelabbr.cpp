@@ -23,7 +23,9 @@ namespace vrv {
 // LabelAbbr
 //----------------------------------------------------------------------------
 
-LabelAbbr::LabelAbbr() : Object("labelAbbr-"), TextListInterface()
+static const ClassRegistrar<LabelAbbr> s_factory("labelAbbr", LABELABBR);
+
+LabelAbbr::LabelAbbr() : Object(LABELABBR, "labelAbbr-"), TextListInterface()
 {
     Reset();
 }
@@ -35,19 +37,18 @@ void LabelAbbr::Reset()
     Object::Reset();
 }
 
-void LabelAbbr::AddChild(Object *child)
+bool LabelAbbr::IsSupportedChild(Object *child)
 {
     if (child->Is({ LB, REND, TEXT })) {
         assert(dynamic_cast<TextElement *>(child));
     }
-    else {
-        LogError("Adding '%s' to a '%s'", child->GetClassName().c_str(), this->GetClassName().c_str());
-        assert(false);
+    else if (child->IsEditorialElement()) {
+        assert(dynamic_cast<EditorialElement *>(child));
     }
-
-    child->SetParent(this);
-    m_children.push_back(child);
-    Modify();
+    else {
+        return false;
+    }
+    return true;
 }
 
 //----------------------------------------------------------------------------

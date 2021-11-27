@@ -27,7 +27,9 @@ namespace vrv {
 // Pb
 //----------------------------------------------------------------------------
 
-Pb::Pb() : SystemElement("pb-"), AttNNumberLike()
+static const ClassRegistrar<Pb> s_factory("pb", PB);
+
+Pb::Pb() : SystemElement(PB, "pb-"), AttNNumberLike()
 {
     RegisterAttClass(ATT_NNUMBERLIKE);
 
@@ -48,18 +50,20 @@ void Pb::Reset()
 
 int Pb::CastOffEncoding(FunctorParams *functorParams)
 {
-    CastOffEncodingParams *params = dynamic_cast<CastOffEncodingParams *>(functorParams);
+    CastOffEncodingParams *params = vrv_params_cast<CastOffEncodingParams *>(functorParams);
     assert(params);
 
-    // We look if the current system has a least one measure - if yes, we assume that the <pb>
+    // We look if the current system has a pb or at least one measure - if yes, we assume that the <pb>
     // is not the one at the beginning of the content. This is not very robust but at least make it
     // work when rendering a <mdiv> that does not start with a <pb> (which we cannot force)
-    if (params->m_currentSystem->GetChildCount(MEASURE) > 0) {
-        params->m_currentPage = new Page();
-        assert(params->m_doc->GetPages());
-        params->m_doc->GetPages()->AddChild(params->m_currentPage);
-        params->m_currentSystem = new System();
+    if (params->m_currentSystem->GetChildCount(PB) > 0 || params->m_currentSystem->GetChildCount(MEASURE) > 0) {
         params->m_currentPage->AddChild(params->m_currentSystem);
+        params->m_currentSystem = new System();
+        if (params->m_usePages) {
+            params->m_currentPage = new Page();
+            assert(params->m_doc->GetPages());
+            params->m_doc->GetPages()->AddChild(params->m_currentPage);
+        }
     }
 
     MoveItselfTo(params->m_currentSystem);

@@ -40,13 +40,13 @@ namespace vrv {
 // SvgDeviceContext
 //----------------------------------------------------------------------------
 
-SvgDeviceContext::SvgDeviceContext() : DeviceContext()
+SvgDeviceContext::SvgDeviceContext() : DeviceContext(SVG_DEVICE_CONTEXT)
 {
     m_originX = 0;
     m_originY = 0;
 
-    SetBrush(AxBLACK, AxSOLID);
-    SetPen(AxBLACK, 1, AxSOLID);
+    SetBrush(AxNONE, AxSOLID);
+    SetPen(AxNONE, 1, AxSOLID);
 
     m_smuflGlyphs.clear();
 
@@ -54,6 +54,13 @@ SvgDeviceContext::SvgDeviceContext() : DeviceContext()
     m_vrvTextFont = false;
 
     m_mmOutput = false;
+    m_svgBoundingBoxes = false;
+    m_svgViewBox = false;
+    m_html5 = false;
+    m_formatRaw = false;
+    m_removeXlink = false;
+    m_facsimile = false;
+    m_indent = 2;
 
     // create the initial SVG element
     // width and height need to be set later; these are taken care of in "commit"
@@ -61,6 +68,7 @@ SvgDeviceContext::SvgDeviceContext() : DeviceContext()
     m_svgNode.append_attribute("version") = "1.1";
     m_svgNode.append_attribute("xmlns") = "http://www.w3.org/2000/svg";
     m_svgNode.append_attribute("xmlns:xlink") = "http://www.w3.org/1999/xlink";
+    m_svgNode.append_attribute("xmlns:mei") = "http://www.music-encoding.org/ns/mei";
     m_svgNode.append_attribute("overflow") = "visible";
 
     // start the stack
@@ -68,6 +76,8 @@ SvgDeviceContext::SvgDeviceContext() : DeviceContext()
     m_currentNode = m_svgNode;
 
     m_outdata.clear();
+
+    m_glyphPostfixId = Object::GenerateRandUuid();
 }
 
 SvgDeviceContext::~SvgDeviceContext() {}
@@ -88,15 +98,22 @@ void SvgDeviceContext::Commit(bool xml_declaration)
     }
 
     // take care of width/height once userScale is updated
+    double height = (double)GetHeight() * GetUserScaleY();
+    double width = (double)GetWidth() * GetUserScaleX();
+    const char *format = "%gpx";
+
     if (m_mmOutput) {
-        m_svgNode.prepend_attribute("height")
-            = StringFormat("%.2fmm", ((double)GetHeight() * GetUserScaleY()) / 10).c_str();
-        m_svgNode.prepend_attribute("width")
-            = StringFormat("%.2fmm", ((double)GetWidth() * GetUserScaleX()) / 10).c_str();
+        height /= 10;
+        width /= 10;
+        format = "%gmm";
+    }
+
+    if (m_svgViewBox) {
+        m_svgNode.prepend_attribute("viewBox") = StringFormat("0 0 %g %g", width, height).c_str();
     }
     else {
-        m_svgNode.prepend_attribute("height") = StringFormat("%.2fpx", ((double)GetHeight() * GetUserScaleY())).c_str();
-        m_svgNode.prepend_attribute("width") = StringFormat("%.2fpx", ((double)GetWidth() * GetUserScaleX())).c_str();
+        m_svgNode.prepend_attribute("height") = StringFormat(format, height).c_str();
+        m_svgNode.prepend_attribute("width") = StringFormat(format, width).c_str();
     }
 
     // add the woff VerovioText font if needed
@@ -114,7 +131,7 @@ void SvgDeviceContext::Commit(bool xml_declaration)
         pugi::xml_document sourceDoc;
 
         // for each needed glyph
-        std::vector<std::string>::const_iterator it;
+        std::set<std::string>::const_iterator it;
         for (it = m_smuflGlyphs.begin(); it != m_smuflGlyphs.end(); ++it) {
             // load the XML file that contains it as a pugi::xml_document
             std::ifstream source((*it).c_str());
@@ -122,6 +139,8 @@ void SvgDeviceContext::Commit(bool xml_declaration)
 
             // copy all the nodes inside into the master document
             for (pugi::xml_node child = sourceDoc.first_child(); child; child = child.next_sibling()) {
+                std::string id = StringFormat("%s-%s", child.attribute("id").value(), m_glyphPostfixId.c_str());
+                child.attribute("id").set_value(id.c_str());
                 defs.append_copy(child);
             }
         }
@@ -137,19 +156,24 @@ void SvgDeviceContext::Commit(bool xml_declaration)
         decl.append_attribute("standalone") = "no";
     }
 
+    if (m_formatRaw) {
+        output_flags |= pugi::format_raw;
+    }
+
     // add description statement
     pugi::xml_node desc = m_svgNode.prepend_child("desc");
     desc.append_child(pugi::node_pcdata)
         .set_value(StringFormat("Engraved by Verovio %s", GetVersion().c_str()).c_str());
 
     // save the glyph data to m_outdata
-    m_svgDoc.save(m_outdata, "\t", output_flags);
+    std::string indent = (m_indent == -1) ? "\t" : std::string(m_indent, ' ');
+    m_svgDoc.save(m_outdata, indent.c_str(), output_flags);
 
     m_committed = true;
 }
 
 // SS
-void SvgDeviceContext::StartGraphicSSNotation(Object *object, std::string gClass, std::string gId) {
+void SvgDeviceContext::StartGraphicSSNotation(Object *object, std::string gClass, std::string gId, bool primary, bool prepend) {
     
     int measureIdx = -1;
     
@@ -447,35 +471,32 @@ void SvgDeviceContext::StartGraphicSSNotation(Object *object, std::string gClass
     
 }
     
-void SvgDeviceContext::StartGraphic(Object *object, std::string gClass, std::string gId)
+void SvgDeviceContext::StartGraphic(Object *object, std::string gClass, std::string gId, bool primary, bool prepend)
 {
-    std::string baseClass = object->GetClassName();
-    std::transform(baseClass.begin(), baseClass.begin() + 1, baseClass.begin(), ::tolower);
-    if (gClass.length() > 0) {
-        baseClass.append(" " + gClass);
-    }
-
     if (object->HasAttClass(ATT_TYPED)) {
         AttTyped *att = dynamic_cast<AttTyped *>(object);
         assert(att);
         if (att->HasType()) {
-            baseClass.append(" " + att->GetType());
+            gClass.append((gClass.empty() ? "" : " ") + att->GetType());
         }
     }
 
-    m_currentNode = m_currentNode.append_child("g");
-    m_svgNodeStack.push_back(m_currentNode);
-    m_currentNode.append_attribute("class") = baseClass.c_str();
-    if (gId.length() > 0) {
-        m_currentNode.append_attribute("id") = gId.c_str();
+    if (prepend) {
+        m_currentNode = m_currentNode.prepend_child("g");
     }
+    else {
+        m_currentNode = m_currentNode.append_child("g");
+    }
+    m_svgNodeStack.push_back(m_currentNode);
+    AppendIdAndClass(gId, object->GetClassName(), gClass, primary);
+    AppendAdditionalAttributes(object);
 
     // SS
     StartGraphicSSNotation(object, gClass, gId);
     
     // this sets staffDef styles for lyrics
     if (object->Is(STAFF)) {
-        Staff *staff = dynamic_cast<Staff *>(object);
+        Staff *staff = vrv_cast<Staff *>(object);
         assert(staff);
 
         assert(staff->m_drawingStaffDef);
@@ -503,6 +524,9 @@ void SvgDeviceContext::StartGraphic(Object *object, std::string gClass, std::str
         assert(att);
         if (att->HasColor()) {
             // SS Ignore color. Try not to
+            if (object->IsControlElement()) {
+                m_currentNode.append_attribute("color") = att->GetColor().c_str();
+            }
             m_currentNode.append_attribute("fill") = att->GetColor().c_str();
         }
     }
@@ -550,6 +574,17 @@ void SvgDeviceContext::StartGraphic(Object *object, std::string gClass, std::str
         }
     }
 
+    if (object->HasAttClass(ATT_LINKING)) {
+        AttLinking *att = dynamic_cast<AttLinking *>(object);
+        assert(att);
+        if (att->HasFollows()) {
+            m_currentNode.append_attribute("mei:follows") = att->GetFollows().c_str();
+        }
+        if (att->HasPrecedes()) {
+            m_currentNode.append_attribute("mei:precedes") = att->GetPrecedes().c_str();
+        }
+    }
+
     // m_currentNode.append_attribute("style") = StringFormat("stroke: #%s; stroke-opacity: %f; fill: #%s; fill-opacity:
     // %f;",
     // GetColour(currentPen.GetColour()).c_str(), currentPen.GetOpacity(), GetColour(currentBrush.GetColour()).c_str(),
@@ -558,30 +593,17 @@ void SvgDeviceContext::StartGraphic(Object *object, std::string gClass, std::str
 
 void SvgDeviceContext::StartCustomGraphic(std::string name, std::string gClass, std::string gId)
 {
-    if (gClass.length() > 0) {
-        name.append(" " + gClass);
-    }
-
     m_currentNode = m_currentNode.append_child("g");
     m_svgNodeStack.push_back(m_currentNode);
-    m_currentNode.append_attribute("class") = name.c_str();
-    if (gId.length() > 0) {
-        m_currentNode.append_attribute("id") = gId.c_str();
-    }
+    AppendIdAndClass(gId, name, gClass);
 }
 
 void SvgDeviceContext::StartTextGraphic(Object *object, std::string gClass, std::string gId)
 {
-    std::string baseClass = object->GetClassName();
-    std::transform(baseClass.begin(), baseClass.begin() + 1, baseClass.begin(), ::tolower);
-    if (gClass.length() > 0) {
-        baseClass.append(" " + gClass);
-    }
-
     m_currentNode = AppendChild("tspan");
     m_svgNodeStack.push_back(m_currentNode);
-    m_currentNode.append_attribute("class") = baseClass.c_str();
-    m_currentNode.append_attribute("id") = gId.c_str();
+    AppendIdAndClass(gId, object->GetClassName(), gClass);
+    AppendAdditionalAttributes(object);
 
     if (object->HasAttClass(ATT_COLOR)) {
         AttColor *att = dynamic_cast<AttColor *>(object);
@@ -631,8 +653,9 @@ void SvgDeviceContext::StartTextGraphic(Object *object, std::string gClass, std:
 
 void SvgDeviceContext::ResumeGraphic(Object *object, std::string gId)
 {
-    std::string xpath = "//g[@id=\"" + gId + "\"]";
-    pugi::xpath_node selection = m_currentNode.select_single_node(xpath.c_str());
+    std::string xpathPrefix = m_html5 ? "//g[@data-id=\"" : "//g[@id=\"";
+    std::string xpath = xpathPrefix + gId + "\"]";
+    pugi::xpath_node selection = m_currentNode.select_node(xpath.c_str());
     if (selection) {
         m_currentNode = selection.node();
     }
@@ -641,9 +664,9 @@ void SvgDeviceContext::ResumeGraphic(Object *object, std::string gId)
 
 void SvgDeviceContext::EndGraphic(Object *object, View *view)
 {
+    DrawSvgBoundingBox(object, view);
     m_svgNodeStack.pop_back();
     m_currentNode = m_svgNodeStack.back();
-    DrawSvgBoundingBox(object, view);
 }
 
 void SvgDeviceContext::EndCustomGraphic()
@@ -656,14 +679,13 @@ void SvgDeviceContext::EndResumedGraphic(Object *object, View *view)
 {
     m_svgNodeStack.pop_back();
     m_currentNode = m_svgNodeStack.back();
-    DrawSvgBoundingBox(object, view);
 }
 
 void SvgDeviceContext::EndTextGraphic(Object *object, View *view)
 {
+    DrawSvgBoundingBox(object, view);
     m_svgNodeStack.pop_back();
     m_currentNode = m_svgNodeStack.back();
-    DrawSvgBoundingBox(object, view);
 }
 
 void SvgDeviceContext::RotateGraphic(Point const &orig, double angle)
@@ -686,7 +708,10 @@ void SvgDeviceContext::StartPage()
         m_currentNode.append_attribute("type") = "text/css";
         m_currentNode.append_child(pugi::node_pcdata)
             .set_value("g.page-margin{font-family:Times;} "
-                       "g.tempo{font-weight:bold;} g.dir, g.dynam, "
+                       //"g.page-margin{background: pink;} "
+                       //"g.bounding-box{stroke:red; stroke-width:10} "
+                       //"g.content-bounding-box{stroke:blue; stroke-width:10} "
+                       "g.ending, g.fing, g.reh, g.tempo{font-weight:bold;} g.dir, g.dynam, "
                        "g.mNum{font-style:italic;} g.label{font-weight:normal;}");
         m_currentNode = m_svgNodeStack.back();
     }
@@ -695,8 +720,14 @@ void SvgDeviceContext::StartPage()
     m_currentNode = m_currentNode.append_child("svg");
     m_svgNodeStack.push_back(m_currentNode);
     m_currentNode.append_attribute("class") = "definition-scale";
-    m_currentNode.append_attribute("viewBox")
-        = StringFormat("0 0 %d %d", GetWidth() * DEFINITION_FACTOR, GetHeight() * DEFINITION_FACTOR).c_str();
+    m_currentNode.append_attribute("color") = "black";
+    if (this->GetFacsimile()) {
+        m_currentNode.append_attribute("viewBox") = StringFormat("0 0 %d %d", GetWidth(), GetHeight()).c_str();
+    }
+    else {
+        m_currentNode.append_attribute("viewBox")
+            = StringFormat("0 0 %d %d", GetWidth() * DEFINITION_FACTOR, GetContentHeight() * DEFINITION_FACTOR).c_str();
+    }
 
     // a graphic for the origin
     m_currentNode = m_currentNode.append_child("g");
@@ -704,6 +735,12 @@ void SvgDeviceContext::StartPage()
     m_currentNode.append_attribute("class") = "page-margin";
     m_currentNode.append_attribute("transform")
         = StringFormat("translate(%d, %d)", (int)((double)m_originX), (int)((double)m_originY)).c_str();
+
+    // margin rectangle for debugging
+    // pugi::xml_node rect = m_currentNode.append_child("rect");
+    // rect.append_attribute("fill") = "pink";
+    // rect.append_attribute("height") = StringFormat("%d", GetHeight() * DEFINITION_FACTOR - 2 * m_originY).c_str();
+    // rect.append_attribute("width") = StringFormat("%d", GetWidth() * DEFINITION_FACTOR - 2 * m_originX).c_str();
 
     m_pageNode = m_currentNode;
 }
@@ -762,7 +799,48 @@ pugi::xml_node SvgDeviceContext::AppendChild(std::string name)
 }
 
 // Drawing methods
-void SvgDeviceContext::DrawComplexBezierPath(Point bezier1[4], Point bezier2[4])
+void SvgDeviceContext::DrawQuadBezierPath(Point bezier[3])
+{
+    pugi::xml_node pathChild = AppendChild("path");
+    pathChild.append_attribute("d") = StringFormat("M%d,%d Q%d,%d %d,%d", // Base string
+        bezier[0].x, bezier[0].y, // M Command
+        bezier[1].x, bezier[1].y, bezier[2].x, bezier[2].y)
+                                          .c_str();
+    pathChild.append_attribute("fill") = "none";
+    pathChild.append_attribute("stroke") = GetColour(m_penStack.top().GetColour()).c_str();
+    pathChild.append_attribute("stroke-linecap") = "round";
+    pathChild.append_attribute("stroke-linejoin") = "round";
+    pathChild.append_attribute("stroke-width") = m_penStack.top().GetWidth();
+    if (m_penStack.top().GetDashLength() > 0) {
+        // Since we have stroke-linecap=round, change the dash length to be the percieved length.
+        int dashOn = std::max(m_penStack.top().GetDashLength() - m_penStack.top().GetWidth(), 0);
+        int dashOff = m_penStack.top().GetDashLength() + m_penStack.top().GetWidth();
+        pathChild.append_attribute("stroke-dasharray") = StringFormat("%d, %d", dashOn, dashOff).c_str();
+    }
+}
+
+void SvgDeviceContext::DrawCubicBezierPath(Point bezier[4])
+{
+    pugi::xml_node pathChild = AppendChild("path");
+    pathChild.append_attribute("d") = StringFormat("M%d,%d C%d,%d %d,%d %d,%d", // Base string
+        bezier[0].x, bezier[0].y, // M Command
+        bezier[1].x, bezier[1].y, bezier[2].x, bezier[2].y, bezier[3].x, bezier[3].y // Remaining bezier points.
+        )
+                                          .c_str();
+    pathChild.append_attribute("fill") = "none";
+    pathChild.append_attribute("stroke") = GetColour(m_penStack.top().GetColour()).c_str();
+    pathChild.append_attribute("stroke-linecap") = "round";
+    pathChild.append_attribute("stroke-linejoin") = "round";
+    pathChild.append_attribute("stroke-width") = m_penStack.top().GetWidth();
+    if (m_penStack.top().GetDashLength() > 0) {
+        // Since we have stroke-linecap=round, change the dash length to be the percieved length.
+        int dashOn = std::max(m_penStack.top().GetDashLength() - m_penStack.top().GetWidth(), 0);
+        int dashOff = m_penStack.top().GetDashLength() + m_penStack.top().GetWidth();
+        pathChild.append_attribute("stroke-dasharray") = StringFormat("%d, %d", dashOn, dashOff).c_str();
+    }
+}
+
+void SvgDeviceContext::DrawCubicBezierPathFilled(Point bezier1[4], Point bezier2[4])
 {
     pugi::xml_node pathChild = AppendChild("path");
     pathChild.append_attribute("d")
@@ -771,9 +849,9 @@ void SvgDeviceContext::DrawComplexBezierPath(Point bezier1[4], Point bezier2[4])
             bezier2[2].x, bezier2[2].y, bezier2[1].x, bezier2[1].y, bezier2[0].x, bezier2[0].y // Second Bezier
             )
               .c_str();
-    // pathChild.append_attribute("fill") = "#000000";
+    // pathChild.append_attribute("fill") = "currentColor";
     // pathChild.append_attribute("fill-opacity") = "1";
-    pathChild.append_attribute("stroke") = StringFormat("#%s", GetColour(m_penStack.top().GetColour()).c_str()).c_str();
+    pathChild.append_attribute("stroke") = GetColour(m_penStack.top().GetColour()).c_str();
     pathChild.append_attribute("stroke-linecap") = "round";
     pathChild.append_attribute("stroke-linejoin") = "round";
     // pathChild.append_attribute("stroke-opacity") = "1";
@@ -805,8 +883,7 @@ void SvgDeviceContext::DrawEllipse(int x, int y, int width, int height)
     if (currentPen.GetOpacity() != 1.0) ellipseChild.append_attribute("stroke-opacity") = currentPen.GetOpacity();
     if (currentPen.GetWidth() > 0) {
         ellipseChild.append_attribute("stroke-width") = currentPen.GetWidth();
-        ellipseChild.append_attribute("stroke")
-            = StringFormat("#%s", GetColour(m_penStack.top().GetColour()).c_str()).c_str();
+        ellipseChild.append_attribute("stroke") = GetColour(m_penStack.top().GetColour()).c_str();
     }
 }
 
@@ -872,13 +949,12 @@ void SvgDeviceContext::DrawEllipticArc(int x, int y, int width, int height, doub
     pathChild.append_attribute("d") = StringFormat(
         "M%d %d A%d %d 0.0 %d %d %d %d", int(xs), int(ys), abs(int(rx)), abs(int(ry)), fArc, fSweep, int(xe), int(ye))
                                           .c_str();
-    // pathChild.append_attribute("fill") = "#000000";
+    // pathChild.append_attribute("fill") = "currentColor";
     if (currentBrush.GetOpacity() != 1.0) pathChild.append_attribute("fill-opacity") = currentBrush.GetOpacity();
     if (currentPen.GetOpacity() != 1.0) pathChild.append_attribute("stroke-opacity") = currentPen.GetOpacity();
     if (currentPen.GetWidth() > 0) {
         pathChild.append_attribute("stroke-width") = currentPen.GetWidth();
-        pathChild.append_attribute("stroke")
-            = StringFormat("#%s", GetColour(m_penStack.top().GetColour()).c_str()).c_str();
+        pathChild.append_attribute("stroke") = GetColour(m_penStack.top().GetColour()).c_str();
     }
 }
 
@@ -886,8 +962,13 @@ void SvgDeviceContext::DrawLine(int x1, int y1, int x2, int y2)
 {
     pugi::xml_node pathChild = AppendChild("path");
     pathChild.append_attribute("d") = StringFormat("M%d %d L%d %d", x1, y1, x2, y2).c_str();
-    pathChild.append_attribute("stroke") = StringFormat("#%s", GetColour(m_penStack.top().GetColour()).c_str()).c_str();
-    if (m_penStack.top().GetDashLength() > 0)
+    pathChild.append_attribute("stroke") = GetColour(m_penStack.top().GetColour()).c_str();
+    if (m_penStack.top().GetLineCap() > 0) {
+        pathChild.append_attribute("stroke-linecap") = "round";
+        pathChild.append_attribute("stroke-dasharray")
+            = StringFormat("1, %d", int(2.5 * m_penStack.top().GetDashLength())).c_str();
+    }
+    else if (m_penStack.top().GetDashLength() > 0)
         pathChild.append_attribute("stroke-dasharray")
             = StringFormat("%d, %d", m_penStack.top().GetDashLength(), m_penStack.top().GetDashLength()).c_str();
     if (m_penStack.top().GetWidth() > 1) pathChild.append_attribute("stroke-width") = m_penStack.top().GetWidth();
@@ -905,16 +986,13 @@ void SvgDeviceContext::DrawPolygon(int n, Point points[], int xoffset, int yoffs
     // if (fillStyle == wxODDEVEN_RULE)
     //    polygonChild.append_attribute("fill-rule") = "evenodd;";
     // else
-    if (currentPen.GetWidth() > 0)
-        polygonChild.append_attribute("stroke")
-            = StringFormat("#%s", GetColour(currentPen.GetColour()).c_str()).c_str();
+    if (currentPen.GetWidth() > 0) polygonChild.append_attribute("stroke") = GetColour(currentPen.GetColour()).c_str();
     if (currentPen.GetWidth() > 1)
         polygonChild.append_attribute("stroke-width") = StringFormat("%d", currentPen.GetWidth()).c_str();
     if (currentPen.GetOpacity() != 1.0)
         polygonChild.append_attribute("stroke-opacity") = StringFormat("%f", currentPen.GetOpacity()).c_str();
-    if (currentBrush.GetColour() != AxBLACK)
-        polygonChild.append_attribute("fill")
-            = StringFormat("#%s", GetColour(currentBrush.GetColour()).c_str()).c_str();
+    if (currentBrush.GetColour() != AxNONE)
+        polygonChild.append_attribute("fill") = GetColour(currentBrush.GetColour()).c_str();
     if (currentBrush.GetOpacity() != 1.0)
         polygonChild.append_attribute("fill-opacity") = StringFormat("%f", currentBrush.GetOpacity()).c_str();
 
@@ -930,9 +1008,26 @@ void SvgDeviceContext::DrawRectangle(int x, int y, int width, int height)
     DrawRoundedRectangle(x, y, width, height, 0);
 }
 
-void SvgDeviceContext::DrawRoundedRectangle(int x, int y, int width, int height, double radius)
+void SvgDeviceContext::DrawRoundedRectangle(int x, int y, int width, int height, int radius)
 {
-    std::string s;
+    pugi::xml_node rectChild = AppendChild("rect");
+
+    if (m_penStack.size()) {
+        Pen currentPen = m_penStack.top();
+        if (currentPen.GetWidth() > 0) rectChild.append_attribute("stroke") = GetColour(currentPen.GetColour()).c_str();
+        if (currentPen.GetWidth() > 1)
+            rectChild.append_attribute("stroke-width") = StringFormat("%d", currentPen.GetWidth()).c_str();
+        if (currentPen.GetOpacity() != 1.0)
+            rectChild.append_attribute("stroke-opacity") = StringFormat("%f", currentPen.GetOpacity()).c_str();
+    }
+
+    if (m_brushStack.size()) {
+        Brush currentBrush = m_brushStack.top();
+        if (currentBrush.GetColour() != AxNONE)
+            rectChild.append_attribute("fill") = GetColour(currentBrush.GetColour()).c_str();
+        if (currentBrush.GetOpacity() != 1.0)
+            rectChild.append_attribute("fill-opacity") = StringFormat("%f", currentBrush.GetOpacity()).c_str();
+    }
 
     // negative heights or widths are not allowed in SVG
     if (height < 0) {
@@ -944,19 +1039,11 @@ void SvgDeviceContext::DrawRoundedRectangle(int x, int y, int width, int height,
         x -= width;
     }
 
-    pugi::xml_node rectChild = AppendChild("rect");
     rectChild.append_attribute("x") = x;
     rectChild.append_attribute("y") = y;
     rectChild.append_attribute("height") = height;
     rectChild.append_attribute("width") = width;
     if (radius != 0) rectChild.append_attribute("rx") = radius;
-    // for empty rectangles with bounding boxes
-    /*
-    rectChild.append_attribute("fill-opacity") = "0.0";
-    rectChild.append_attribute("stroke-opacity") = "1.0";
-    rectChild.append_attribute("stroke-width") = "10";
-    rectChild.append_attribute("stroke") = StringFormat("#%s", GetColour(m_penStack.top().GetColour()).c_str()).c_str();
-     */
 }
 
 void SvgDeviceContext::StartText(int x, int y, data_HORIZONTALALIGNMENT alignment)
@@ -1022,17 +1109,25 @@ void SvgDeviceContext::MoveTextTo(int x, int y, data_HORIZONTALALIGNMENT alignme
     }
 }
 
+void SvgDeviceContext::MoveTextVerticallyTo(int y)
+{
+    m_currentNode.append_attribute("y") = y;
+}
+
 void SvgDeviceContext::EndText()
 {
     m_svgNodeStack.pop_back();
     m_currentNode = m_svgNodeStack.back();
 }
 
-void SvgDeviceContext::DrawText(const std::string &text, const std::wstring wtext, int x, int y)
+// draw text element with optional parameters to specify the bounding box of the text
+// if the bounding box is specified then append a rect child
+void SvgDeviceContext::DrawText(const std::string &text, const std::wstring &wtext, int x, int y, int width, int height)
 {
     assert(m_fontStack.top());
 
     std::string svgText = text;
+
     // Because IE does not support xml:space="preserve", we need to replace the initial
     // space with a non breakable space
     if ((svgText.length() > 0) && (svgText[0] == ' ')) {
@@ -1058,10 +1153,32 @@ void SvgDeviceContext::DrawText(const std::string &text, const std::wstring wtex
     if (m_fontStack.top()->GetPointSize() != 0) {
         textChild.append_attribute("font-size") = StringFormat("%dpx", m_fontStack.top()->GetPointSize()).c_str();
     }
+    if (m_fontStack.top()->GetStyle() != FONTSTYLE_NONE) {
+        if (m_fontStack.top()->GetStyle() == FONTSTYLE_italic) {
+            textChild.append_attribute("font-style") = "italic";
+        }
+        else if (m_fontStack.top()->GetStyle() == FONTSTYLE_normal) {
+            textChild.append_attribute("font-style") = "normal";
+        }
+        else if (m_fontStack.top()->GetStyle() == FONTSTYLE_oblique) {
+            textChild.append_attribute("font-style") = "oblique";
+        }
+    }
     textChild.append_attribute("class") = "text";
     textChild.append_child(pugi::node_pcdata).set_value(svgText.c_str());
 
-    if ((x != VRV_UNSET) && (y != VRV_UNSET)) {
+    if ((x != 0) && (y != 0) && (x != VRV_UNSET) && (y != VRV_UNSET) && (width != 0) && (height != 0)
+        && (width != VRV_UNSET) && (height != VRV_UNSET)) {
+        pugi::xml_node g = m_currentNode.parent().parent();
+        pugi::xml_node rectChild = g.append_child("rect");
+        rectChild.append_attribute("class") = "sylTextRect";
+        rectChild.append_attribute("x") = StringFormat("%d", x).c_str();
+        rectChild.append_attribute("y") = StringFormat("%d", y).c_str();
+        rectChild.append_attribute("width") = StringFormat("%d", width).c_str();
+        rectChild.append_attribute("height") = StringFormat("%d", height).c_str();
+        rectChild.append_attribute("opacity") = "0.0";
+    }
+    else if ((x != 0) && (y != 0) && (x != VRV_UNSET) && (y != VRV_UNSET)) {
         textChild.append_attribute("x") = StringFormat("%d", x).c_str();
         textChild.append_attribute("y") = StringFormat("%d", y).c_str();
     }
@@ -1078,6 +1195,12 @@ void SvgDeviceContext::DrawMusicText(const std::wstring &text, int x, int y, boo
 
     int w, h, gx, gy;
 
+    // remove the `xlink:` prefix for backwards compatibility with older SVG viewers.
+    std::string hrefAttrib = "href";
+    if (!m_removeXlink) {
+        hrefAttrib.insert(0, "xlink:");
+    }
+
     // print chars one by one
     for (unsigned int i = 0; i < text.length(); ++i) {
         wchar_t c = text.at(i);
@@ -1089,18 +1212,21 @@ void SvgDeviceContext::DrawMusicText(const std::wstring &text, int x, int y, boo
         std::string path = glyph->GetPath();
 
         // Add the glyph to the array for the <defs>
-        std::vector<std::string>::const_iterator it = std::find(m_smuflGlyphs.begin(), m_smuflGlyphs.end(), path);
-        if (it == m_smuflGlyphs.end()) {
-            m_smuflGlyphs.push_back(path);
-        }
+        m_smuflGlyphs.insert(path);
 
         // Write the char in the SVG
         pugi::xml_node useChild = AppendChild("use");
-        useChild.append_attribute("xlink:href") = StringFormat("#%s", glyph->GetCodeStr().c_str()).c_str();
+        useChild.append_attribute(hrefAttrib.c_str())
+            = StringFormat("#%s-%s", glyph->GetCodeStr().c_str(), m_glyphPostfixId.c_str()).c_str();
         useChild.append_attribute("x") = x;
         useChild.append_attribute("y") = y;
         useChild.append_attribute("height") = StringFormat("%dpx", m_fontStack.top()->GetPointSize()).c_str();
         useChild.append_attribute("width") = StringFormat("%dpx", m_fontStack.top()->GetPointSize()).c_str();
+        if (m_fontStack.top()->GetWidthToHeightRatio() != 1.0f) {
+            useChild.append_attribute("transform") = StringFormat("matrix(%f,0,0,1,%f,0)",
+                m_fontStack.top()->GetWidthToHeightRatio(), x * (1. - m_fontStack.top()->GetWidthToHeightRatio()))
+                                                         .c_str();
+        }
 
         // Get the bounds of the char
         if (glyph->GetHorizAdvX() > 0)
@@ -1132,19 +1258,63 @@ void SvgDeviceContext::AddDescription(const std::string &text)
     desc.append_child(pugi::node_pcdata).set_value(text.c_str());
 }
 
+void SvgDeviceContext::AppendIdAndClass(std::string gId, std::string baseClass, std::string addedClasses, bool primary)
+{
+    std::transform(baseClass.begin(), baseClass.begin() + 1, baseClass.begin(), ::tolower);
+
+    if (gId.length() > 0) {
+        if (m_html5) {
+            m_currentNode.append_attribute("data-id") = gId.c_str();
+        }
+        else if (primary) {
+            // Don't write ids for HTML5 to avoid id clashes when embedding into
+            // an HTML document.
+            m_currentNode.append_attribute("id") = gId.c_str();
+        }
+    }
+
+    if (m_html5) {
+        m_currentNode.append_attribute("data-class") = baseClass.c_str();
+    }
+
+    if (!primary) {
+        baseClass.append(" spanning id-" + gId);
+    }
+    if (!addedClasses.empty()) {
+        baseClass.append(" " + addedClasses);
+    }
+    m_currentNode.append_attribute("class") = baseClass.c_str();
+}
+
+void SvgDeviceContext::AppendAdditionalAttributes(Object *object)
+{
+    std::pair<std::multimap<ClassId, std::string>::iterator, std::multimap<ClassId, std::string>::iterator> range;
+    range = m_svgAdditionalAttributes.equal_range(object->GetClassId()); // if correct class name...
+    for (std::multimap<ClassId, std::string>::iterator it = range.first; it != range.second; ++it) {
+        ArrayOfStrAttr attributes;
+        object->GetAttributes(&attributes);
+        for (ArrayOfStrAttr::iterator iter = attributes.begin(); iter != attributes.end(); ++iter) {
+            if (it->second == (*iter).first) // ...and attribute exists in class name, add it to SVG element
+                m_currentNode.append_attribute(("data-" + it->second).c_str()) = (*iter).second.c_str();
+        }
+    }
+}
+
 std::string SvgDeviceContext::GetColour(int colour)
 {
     std::ostringstream ss;
+    ss << "#";
     ss << std::hex;
 
     switch (colour) {
-        case (AxBLACK): return "000000";
-        case (AxWHITE): return "FFFFFF";
-        case (AxRED): return "FF0000";
-        case (AxGREEN): return "00FF00";
-        case (AxBLUE): return "0000FF";
-        case (AxCYAN): return "00FFFF";
-        case (AxLIGHT_GREY): return "777777";
+        case (AxNONE): return "currentColor";
+        case (AxBLACK): return "#000000";
+        case (AxWHITE): return "#FFFFFF";
+        case (AxRED): return "#FF0000";
+        case (AxGREEN): return "#00FF00";
+        case (AxBLUE): return "#0000FF";
+        case (AxCYAN): return "#00FFFF";
+        case (AxLIGHT_GREY): return "#777777";
         default:
             int blue = (colour & 255);
             int green = (colour >> 8) & 255;
@@ -1162,14 +1332,40 @@ std::string SvgDeviceContext::GetStringSVG(bool xml_declaration)
     return m_outdata.str();
 }
 
+void SvgDeviceContext::DrawSvgBoundingBoxRectangle(int x, int y, int width, int height)
+{
+    std::string s;
+
+    // negative heights or widths are not allowed in SVG
+    if (height < 0) {
+        height = -height;
+        y -= height;
+    }
+    if (width < 0) {
+        width = -width;
+        x -= width;
+    }
+
+    pugi::xml_node rectChild = AppendChild("rect");
+    rectChild.append_attribute("x") = x;
+    rectChild.append_attribute("y") = y;
+    rectChild.append_attribute("height") = height;
+    rectChild.append_attribute("width") = width;
+
+    rectChild.append_attribute("fill") = "transparent";
+}
+
 void SvgDeviceContext::DrawSvgBoundingBox(Object *object, View *view)
 {
-    bool drawBoundingBox = false;
-    if (drawBoundingBox && view) {
+    bool groupInPage = false;
+    bool drawAnchors = false;
+    bool drawContentBB = false;
+
+    if (m_svgBoundingBoxes && view) {
         BoundingBox *box = object;
         // For floating elements, get the current bounding box set by System::SetCurrentFloatingPositioner
         if (object->IsFloatingObject()) {
-            FloatingObject *floatingObject = dynamic_cast<FloatingObject *>(object);
+            FloatingObject *floatingObject = vrv_cast<FloatingObject *>(object);
             assert(floatingObject);
             box = floatingObject->GetCurrentFloatingPositioner();
             // No bounding box found, ignore the object - this happens when the @staff is missing because the element is
@@ -1177,13 +1373,15 @@ void SvgDeviceContext::DrawSvgBoundingBox(Object *object, View *view)
             if (!box) return;
         }
 
-        SetPen(AxRED, 10, AxDOT_DASH);
-        // SetBrush(AxWHITE, AxTRANSPARENT);
         pugi::xml_node currentNode = m_currentNode;
-        m_currentNode = m_pageNode;
-        StartGraphic(object, "self-bounding-box", "bbox-" + object->GetUuid());
+        if (groupInPage) {
+            m_currentNode = m_pageNode;
+        }
+
+        StartGraphic(object, "bounding-box", "bbox-" + object->GetUuid(), true, true);
+
         if (box->HasSelfBB()) {
-            this->DrawRectangle(view->ToDeviceContextX(object->GetDrawingX() + box->GetSelfX1()),
+            this->DrawSvgBoundingBoxRectangle(view->ToDeviceContextX(object->GetDrawingX() + box->GetSelfX1()),
                 view->ToDeviceContextY(object->GetDrawingY() + box->GetSelfY1()),
                 view->ToDeviceContextX(object->GetDrawingX() + box->GetSelfX2())
                     - view->ToDeviceContextX(object->GetDrawingX() + box->GetSelfX1()),
@@ -1191,64 +1389,63 @@ void SvgDeviceContext::DrawSvgBoundingBox(Object *object, View *view)
                     - view->ToDeviceContextY(object->GetDrawingY() + box->GetSelfY1()));
         }
 
-        SetPen(AxBLACK, 1, AxSOLID);
-        SetBrush(AxBLACK, AxSOLID);
+        if (drawAnchors) {
+            std::vector<SMuFLGlyphAnchor> anchors = { SMUFL_cutOutNE, SMUFL_cutOutNW, SMUFL_cutOutSE, SMUFL_cutOutSW };
+            std::vector<SMuFLGlyphAnchor>::iterator iter;
 
-        std::vector<SMuFLGlyphAnchor> anchors = { SMUFL_cutOutNE, SMUFL_cutOutNW, SMUFL_cutOutSE, SMUFL_cutOutSW };
-        std::vector<SMuFLGlyphAnchor>::iterator iter;
+            for (iter = anchors.begin(); iter != anchors.end(); ++iter) {
+                if (object->GetBoundingBoxGlyph() != 0) {
+                    Glyph *glyph = Resources::GetGlyph(object->GetBoundingBoxGlyph());
+                    assert(glyph);
 
-        for (iter = anchors.begin(); iter != anchors.end(); ++iter) {
-            if (object->GetBoundingBoxGlyph() != 0) {
-                Glyph *glyph = Resources::GetGlyph(object->GetBoundingBoxGlyph());
-                assert(glyph);
+                    if (glyph->HasAnchor(*iter)) {
+                        const Point *fontPoint = glyph->GetAnchor(*iter);
+                        assert(fontPoint);
+                        Point p;
+                        int x, y, w, h;
+                        glyph->GetBoundingBox(x, y, w, h);
+                        int smuflGlyphFontSize = object->GetBoundingBoxGlyphFontSize();
 
-                if (glyph->HasAnchor(*iter)) {
-                    const Point *fontPoint = glyph->GetAnchor(*iter);
-                    assert(fontPoint);
-                    Point p;
-                    int x, y, w, h;
-                    glyph->GetBoundingBox(x, y, w, h);
-                    int smuflGlyphFontSize = object->GetBoundingBoxGlyphFontSize();
+                        p.x = object->GetSelfLeft() - x * smuflGlyphFontSize / glyph->GetUnitsPerEm();
+                        p.x += (fontPoint->x * smuflGlyphFontSize / glyph->GetUnitsPerEm());
+                        p.y = object->GetSelfBottom() - y * smuflGlyphFontSize / glyph->GetUnitsPerEm();
+                        p.y += (fontPoint->y * smuflGlyphFontSize / glyph->GetUnitsPerEm());
 
-                    p.x = object->GetSelfLeft() - x * smuflGlyphFontSize / glyph->GetUnitsPerEm();
-                    p.x += (fontPoint->x * smuflGlyphFontSize / glyph->GetUnitsPerEm());
-                    p.y = object->GetSelfBottom() - y * smuflGlyphFontSize / glyph->GetUnitsPerEm();
-                    p.y += (fontPoint->y * smuflGlyphFontSize / glyph->GetUnitsPerEm());
-
-                    SetPen(AxGREEN, 10, AxSOLID);
-                    SetBrush(AxGREEN, AxSOLID);
-                    this->DrawCircle(view->ToDeviceContextX(p.x), view->ToDeviceContextY(p.y), 5);
-                    SetPen(AxBLACK, 1, AxSOLID);
-                    SetBrush(AxBLACK, AxSOLID);
+                        SetPen(AxGREEN, 10, AxSOLID);
+                        SetBrush(AxGREEN, AxSOLID);
+                        this->DrawCircle(view->ToDeviceContextX(p.x), view->ToDeviceContextY(p.y), 5);
+                        SetPen(AxNONE, 1, AxSOLID);
+                        SetBrush(AxNONE, AxSOLID);
+                    }
                 }
             }
         }
 
         EndGraphic(object, NULL);
 
-        m_currentNode = m_pageNode;
-
-        // Rend *rend = dynamic_cast<Rend *>(object);
-        // if (rend && rend->HasHalign()) {
-        if (object->IsTextElement()) {
-
-            SetPen(AxBLUE, 20, AxDOT_DASH);
-            StartGraphic(object, "content-bounding-box", "cbbox-" + object->GetUuid());
-            if (object->HasContentBB()) {
-                this->DrawRectangle(view->ToDeviceContextX(object->GetDrawingX() + box->GetContentX1()),
-                    view->ToDeviceContextY(object->GetDrawingY() + box->GetContentY1()),
-                    view->ToDeviceContextX(object->GetDrawingX() + box->GetContentX2())
-                        - view->ToDeviceContextX(object->GetDrawingX() + box->GetContentX1()),
-                    view->ToDeviceContextY(object->GetDrawingY() + box->GetContentY2())
-                        - view->ToDeviceContextY(object->GetDrawingY() + box->GetContentY1()));
-            }
-            EndGraphic(object, NULL);
+        if (groupInPage) {
+            m_currentNode = m_pageNode;
         }
 
-        m_currentNode = currentNode;
+        if (drawContentBB) {
+            if (object->HasContentBB()) {
+                StartGraphic(object, "content-bounding-box", "cbbox-" + object->GetUuid(), true, true);
+                if (object->HasContentBB()) {
+                    this->DrawSvgBoundingBoxRectangle(
+                        view->ToDeviceContextX(object->GetDrawingX() + box->GetContentX1()),
+                        view->ToDeviceContextY(object->GetDrawingY() + box->GetContentY1()),
+                        view->ToDeviceContextX(object->GetDrawingX() + box->GetContentX2())
+                            - view->ToDeviceContextX(object->GetDrawingX() + box->GetContentX1()),
+                        view->ToDeviceContextY(object->GetDrawingY() + box->GetContentY2())
+                            - view->ToDeviceContextY(object->GetDrawingY() + box->GetContentY1()));
+                }
+                EndGraphic(object, NULL);
+            }
+        }
 
-        SetPen(AxBLACK, 1, AxSOLID);
-        SetBrush(AxBLACK, AxSOLID);
+        if (groupInPage) {
+            m_currentNode = currentNode;
+        }
     }
 }
 

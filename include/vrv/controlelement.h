@@ -31,23 +31,30 @@ public:
      */
     ///@{
     ControlElement();
-    ControlElement(std::string classid);
+    ControlElement(ClassId classId);
+    ControlElement(ClassId classId, const std::string &classIdStr);
     virtual ~ControlElement();
-    virtual void Reset();
-    virtual ClassId GetClassId() const { return CONTROL_ELEMENT; }
+    void Reset() override;
     ///@}
 
     /**
      * @name Getter to interfaces
      */
     ///@{
-    virtual LinkingInterface *GetLinkingInterface() { return dynamic_cast<LinkingInterface *>(this); }
+    LinkingInterface *GetLinkingInterface() override { return dynamic_cast<LinkingInterface *>(this); }
     ///@}
 
     /**
      * Check if the ControlElement has a Rend child and return its @halign equivalent (if any)
      */
     data_HORIZONTALALIGNMENT GetChildRendAlignment();
+
+    /**
+     * Check if the ControlElement applies at a point where there is more than on layer.
+     * Returns that placement accordingly - otherwise return the default passed as parameter.
+     * Applied only for trill, mordent, and turn elements.
+     */
+    data_STAFFREL GetLayerPlace(data_STAFFREL defaultValue);
 
     //----------//
     // Functors //
@@ -56,12 +63,12 @@ public:
     /**
      * See Object::AdjustXOverflow
      */
-    virtual int AdjustXOverflow(FunctorParams *functorParams);
+    int AdjustXOverflow(FunctorParams *functorParams) override;
 
     /**
      * See Object::ResetDrawing
      */
-    virtual int ResetDrawing(FunctorParams *functorParams);
+    int ResetDrawing(FunctorParams *functorParams) override;
 
 private:
     //

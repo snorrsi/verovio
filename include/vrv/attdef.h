@@ -21,11 +21,9 @@
 
 namespace vrv {
 
-typedef std::vector<std::pair<std::string, std::string> > ArrayOfStrAttr;
+typedef std::vector<std::pair<std::string, std::string>> ArrayOfStrAttr;
 
 #define VRV_UNSET -0x7FFFFFFF
-
-class data_STAFFREL;
 
 /**
  * MEI virtual unit;
@@ -51,7 +49,9 @@ typedef double data_VU;
 #define DUR_32 7
 #define DUR_64 8
 #define DUR_128 9
-#define DUR_256 10 // this is it for now
+#define DUR_256 10
+#define DUR_512 11
+#define DUR_1024 12 // this is it for now
 // used for alignement
 #define DUR_MAX 1024
 // mensural duration
@@ -84,12 +84,11 @@ typedef std::vector<data_ARTICULATION> data_ARTICULATION_List;
  */
 enum data_BEATRPT_REND {
     BEATRPT_REND_NONE = 0,
+    BEATRPT_REND_1,
+    BEATRPT_REND_2,
+    BEATRPT_REND_3,
     BEATRPT_REND_4,
-    BEATRPT_REND_8,
-    BEATRPT_REND_16,
-    BEATRPT_REND_32,
-    BEATRPT_REND_64,
-    BEATRPT_REND_128,
+    BEATRPT_REND_5,
     BEATRPT_REND_mixed
 };
 
@@ -134,29 +133,10 @@ typedef wchar_t data_HEXNUM;
 
 /**
  * MEI data.KEYSIGNATURE
- * The maximum is 255 (unsigned char)
- * Order from 7f to 7s should not be changed. This is a special case since we use abs()
- * to get the number of flats or sharps
+ * default (unset) is -1; ACCIDENTAL_WRITTEN_NONE
+ * "mixed" is VRV_UNSET; ACCITENTDAL_WRITTEN_NONE
  */
-enum data_KEYSIGNATURE {
-    KEYSIGNATURE_NONE = 0,
-    KEYSIGNATURE_7f,
-    KEYSIGNATURE_6f,
-    KEYSIGNATURE_5f,
-    KEYSIGNATURE_4f,
-    KEYSIGNATURE_3f,
-    KEYSIGNATURE_2f,
-    KEYSIGNATURE_1f,
-    KEYSIGNATURE_0,
-    KEYSIGNATURE_1s,
-    KEYSIGNATURE_2s,
-    KEYSIGNATURE_3s,
-    KEYSIGNATURE_4s,
-    KEYSIGNATURE_5s,
-    KEYSIGNATURE_6s,
-    KEYSIGNATURE_7s,
-    KEYSIGNATURE_mixed
-};
+typedef std::pair<int, data_ACCIDENTAL_WRITTEN> data_KEYSIGNATURE;
 
 /**
  * MEI data.MEASUREBEAT
@@ -167,7 +147,12 @@ typedef std::pair<int, double> data_MEASUREBEAT;
  * MEI data.MEASUREMENTABS
  */
 typedef data_VU data_MEASUREMENTABS;
-    
+
+/**
+ * MEI data.MEASUREMENTREL
+ */
+typedef data_VU data_MEASUREMENTREL;
+
 /**
  * MEI data.MIDIBPM
  */
@@ -271,19 +256,9 @@ enum data_PITCHNAME_GES {
 enum data_PROLATIO { PROLATIO_NONE = -3, PROLATIO_2 = 2, PROLATIO_3 };
 
 /**
- * MEI data.STEMDIRECTION
+ * A typedef for a list of integer summands.
  */
-enum data_STEMDIRECTION {
-    STEMDIRECTION_NONE = 0,
-    STEMDIRECTION_up,
-    STEMDIRECTION_down,
-    STEMDIRECTION_left,
-    STEMDIRECTION_right,
-    STEMDIRECTION_ne,
-    STEMDIRECTION_se,
-    STEMDIRECTION_nw,
-    STEMDIRECTION_sw,
-};
+typedef std::vector<int> data_SUMMAND_List;
 
 /**
  * MEI data.TIE
@@ -295,7 +270,7 @@ enum data_TIE { TIE_NONE = 0, TIE_i, TIE_m, TIE_t };
  * NONE is -3 for perfect value (abs) by default
  */
 enum data_TEMPUS { TEMPUS_NONE = -3, TEMPUS_2 = 2, TEMPUS_3 };
-    
+
 /**
  * A typedef for a list of data.URI integer.
  * E.g., list { xsd:anyURI+ }

@@ -29,7 +29,6 @@ class Mensur : public LayerElement,
                public AttCue,
                public AttDurationRatio,
                public AttMensuralShared,
-               public AttMensurLog,
                public AttMensurVis,
                public AttSlashCount,
                public AttStaffLoc {
@@ -40,40 +39,44 @@ public:
      */
     ///@{
     Mensur();
-    Mensur(const ScoreDefInterface *mensurAttr);
-    void Init();
     virtual ~Mensur();
-    virtual void Reset();
-    virtual std::string GetClassName() const { return "Mensur"; }
-    virtual ClassId GetClassId() const { return MENSUR; }
-    virtual Object *Clone() const { return new Mensur(*this); }
+    Object *Clone() const override { return new Mensur(*this); }
+    void Reset() override;
+    std::string GetClassName() const override { return "Mensur"; }
     ///@}
 
     /** Override the method since alignment is required */
-    virtual bool HasToBeAligned() const { return true; }
+    bool HasToBeAligned() const override { return true; }
+
+    /** Override the method since check is required */
+    bool IsScoreDefElement() const override { return (this->GetParent() && this->GetFirstAncestor(SCOREDEF)); }
 
     //----------//
     // Functors //
     //----------//
 
     /**
-     * See Object::FindSpaceInReferenceAlignments
+     * See Object::LayerCountInTimeSpan
      */
-    virtual int FindSpaceInReferenceAlignments(FunctorParams *functorParams);
+    int LayerCountInTimeSpan(FunctorParams *functorParams) override;
 
 private:
     //
 public:
+    //----------------//
+    // Static members //
+    //----------------//
+
     /**
      * Static member for setting a value from a controller.
      * Used for example in SetValue
      */
-    static int s_num;
+    static const int s_num;
     /**
      * Static member for setting a value from a controller.
      * Used for examle in SetValue.
      */
-    static int s_numBase;
+    static const int s_numBase;
 
 private:
 };

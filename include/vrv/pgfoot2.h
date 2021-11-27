@@ -28,9 +28,8 @@ public:
     ///@{
     PgFoot2();
     virtual ~PgFoot2();
-    virtual void Reset();
-    virtual std::string GetClassName() const { return "PgFoot2"; }
-    virtual ClassId GetClassId() const { return PGFOOT2; }
+    void Reset() override;
+    std::string GetClassName() const override { return "PgFoot2"; }
     ///@}
 
     //----------//

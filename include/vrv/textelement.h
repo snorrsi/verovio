@@ -13,6 +13,8 @@
 
 namespace vrv {
 
+class Rend;
+
 //----------------------------------------------------------------------------
 // TextElement
 //----------------------------------------------------------------------------
@@ -25,19 +27,18 @@ public:
      */
     ///@{
     TextElement();
-    TextElement(std::string classid);
+    TextElement(ClassId classId);
+    TextElement(ClassId classId, const std::string &classIdStr);
     virtual ~TextElement();
-    virtual void Reset();
-    virtual std::string GetClassName() const { return "TextElement"; }
-    virtual ClassId GetClassId() const { return TEXT_ELEMENT; }
+    void Reset() override;
     ///@}
 
     /**
      * @name Get the X and Y drawing position
      */
     ///@{
-    virtual int GetDrawingX() const;
-    virtual int GetDrawingY() const;
+    int GetDrawingX() const override;
+    int GetDrawingY() const override;
     ///@}
 
     /**
@@ -57,7 +58,7 @@ public:
     /**
      * See Object::ResetVerticalAlignment
      */
-    virtual int ResetVerticalAlignment(FunctorParams *functorParams);
+    int ResetVerticalAlignment(FunctorParams *functorParams) override;
 
 private:
     //
@@ -89,20 +90,31 @@ public:
         m_x = 0;
         m_y = 0;
         m_width = 0;
+        m_height = 0;
         m_laidOut = false;
-        m_newLine = false;
+        m_explicitPosition = false;
+        m_verticalShift = false;
         m_alignment = HORIZONTALALIGNMENT_left;
         m_pointSize = 0;
+        m_actualWidth = 0;
+        m_enclose = TEXTRENDITION_NONE;
     }
     virtual ~TextDrawingParams(){};
 
     int m_x;
     int m_y;
     int m_width;
+    int m_height;
+    int m_actualWidth;
     bool m_laidOut;
-    bool m_newLine;
+    // used when X and Y has been changed manually or otherwise (e.g. newline <lb/> shift or shift for
+    // boxed enclosure for rend)
+    bool m_explicitPosition;
+    bool m_verticalShift;
     data_HORIZONTALALIGNMENT m_alignment;
     int m_pointSize;
+    std::vector<TextElement *> m_enclosedRend;
+    data_TEXTRENDITION m_enclose;
 };
 
 } // namespace vrv

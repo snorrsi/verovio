@@ -34,14 +34,13 @@ typedef struct _pitchmap {
     data_PITCHNAME pitch;
 } pitchmap;
 
-class DarmsInput : public FileInputStream {
+class DarmsInput : public Input {
 public:
     // constructors and destructors
-    DarmsInput(Doc *doc, std::string filename);
+    DarmsInput(Doc *doc);
     virtual ~DarmsInput();
 
-    virtual bool ImportFile();
-    virtual bool ImportString(std::string const &data);
+    bool Import(const std::string &data) override;
 
 private:
     int do_Note(int pos, const char *data, bool rest);
@@ -53,8 +52,6 @@ private:
 public:
     //
 private:
-    std::string m_filename;
-
     Staff *m_staff;
     Measure *m_measure;
     Layer *m_layer;
@@ -64,7 +61,11 @@ private:
     unsigned int m_clef_offset;
     bool m_antique_notation; // support square notation
 
-    static pitchmap PitchMap[];
+    //----------------//
+    // Static members //
+    //----------------//
+
+    static const pitchmap PitchMap[];
 };
 
 #endif /* NO_DARMS_SUPPORT */

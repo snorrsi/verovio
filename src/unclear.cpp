@@ -21,7 +21,9 @@ namespace vrv {
 // Unclear
 //----------------------------------------------------------------------------
 
-Unclear::Unclear() : EditorialElement("unclear-"), AttSource()
+static const ClassRegistrar<Unclear> s_factory("unclear", UNCLEAR);
+
+Unclear::Unclear() : EditorialElement(UNCLEAR, "unclear-"), AttSource()
 {
     RegisterAttClass(ATT_SOURCE);
 

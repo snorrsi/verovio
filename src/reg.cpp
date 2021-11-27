@@ -21,7 +21,9 @@ namespace vrv {
 // Reg
 //----------------------------------------------------------------------------
 
-Reg::Reg() : EditorialElement("reg-"), AttSource()
+static const ClassRegistrar<Reg> s_factory("reg", REG);
+
+Reg::Reg() : EditorialElement(REG, "reg-"), AttSource()
 {
     RegisterAttClass(ATT_SOURCE);
 

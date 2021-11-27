@@ -15,33 +15,91 @@
 
 //----------------------------------------------------------------------------
 
+#include "boundingbox.h"
+#include "doc.h"
 #include "glyph.h"
 #include "vrv.h"
 
 namespace vrv {
 
+void BezierCurve::Rotate(float angle, const Point &rotationPoint)
+{
+    p1 = BoundingBox::CalcPositionAfterRotation(p1, angle, rotationPoint);
+    p2 = BoundingBox::CalcPositionAfterRotation(p2, angle, rotationPoint);
+    c1 = BoundingBox::CalcPositionAfterRotation(c1, angle, rotationPoint);
+    c2 = BoundingBox::CalcPositionAfterRotation(c2, angle, rotationPoint);
+}
+
+void BezierCurve::CalcInitialControlPointParams(Doc *doc, float angle, int staffSize)
+{
+    const int dist = abs(p2.x - p1.x);
+    const int unit = doc->GetDrawingUnit(staffSize);
+
+    // Initialize offset
+    const double ratio = double(dist) / double(unit);
+    double baseVal = (ratio > 4.0) ? 3.0 : 6.0;
+    if ((ratio > 4.0) && (ratio < 32.0)) {
+        // interpolate baseVal between 6.0 and 3.0
+        baseVal = 8.0 - log2(ratio);
+    }
+    const int offset = dist / baseVal;
+    m_leftControlPointOffset = offset;
+    m_rightControlPointOffset = offset;
+
+    // Initialize height
+    int height = std::max<int>(1.2 * unit, dist / 5);
+    height = std::min<int>(3.0 * unit, height);
+    height *= doc->GetOptions()->m_slurCurveFactor.GetValue();
+    height = std::min(height, 2 * doc->GetDrawingOctaveSize(staffSize));
+    height = std::min<int>(height, 2 * offset * cos(angle));
+    this->SetControlHeight(height);
+}
+
+void BezierCurve::UpdateControlPointParams(curvature_CURVEDIR dir)
+{
+    m_leftControlPointOffset = c1.x - p1.x;
+    m_rightControlPointOffset = p2.x - c2.x;
+    const int sign = (dir == curvature_CURVEDIR_above) ? 1 : -1;
+    m_leftControlHeight = sign * (c1.y - p1.y);
+    m_rightControlHeight = sign * (c2.y - p2.y);
+}
+
+void BezierCurve::UpdateControlPoints(curvature_CURVEDIR dir)
+{
+    c1.x = p1.x + m_leftControlPointOffset;
+    c2.x = p2.x - m_rightControlPointOffset;
+    const int sign = (dir == curvature_CURVEDIR_above) ? 1 : -1;
+    c1.y = p1.y + sign * m_leftControlHeight;
+    c2.y = p2.y + sign * m_rightControlHeight;
+}
+
 //----------------------------------------------------------------------------
 // DeviceContext
 //----------------------------------------------------------------------------
 
-ClassId DeviceContext::GetClassId() const
-{
-    // we should always have the method overridden
-    assert(false);
-    return DEVICE_CONTEXT;
-}
-
-void DeviceContext::SetPen(int colour, int width, int opacity, int dashLength)
+void DeviceContext::SetPen(int colour, int width, int opacity, int dashLength, int lineCap)
 {
     float opacityValue;
 
     switch (opacity) {
         case AxSOLID: opacityValue = 1.0; break;
+        case AxDOT:
+            dashLength = dashLength ? dashLength : width * 1;
+            opacityValue = 1.0;
+            break;
+        case AxLONG_DASH:
+            dashLength = dashLength ? dashLength : width * 4;
+            opacityValue = 1.0;
+            break;
+        case AxSHORT_DASH:
+            dashLength = dashLength ? dashLength : width * 2;
+            opacityValue = 1.0;
+            break;
         case AxTRANSPARENT: opacityValue = 0.0; break;
         default: opacityValue = 1.0; // solid brush by default
     }
 
-    m_penStack.push(Pen(colour, width, opacityValue, dashLength));
+    m_penStack.push(Pen(colour, width, opacityValue, dashLength, lineCap));
 }
 
 void DeviceContext::SetBrush(int colour, int opacity)
@@ -143,7 +201,15 @@ void DeviceContext::GetTextExtent(const std::wstring &string, TextExtend *extend
             glyph = Resources::GetGlyph(c);
         }
         if (!glyph) {
-            glyph = unkown;
+            // There is no glyph for space, and we would use 'o' to increase extend width. However 'o' is wider than
+            // space, which led to incorrect rendering. For the time being, set width to that of '.' instead.
+            // This will probably need to be improved to change with font size/style
+            if (c == L' ') {
+                glyph = Resources::GetTextGlyph(L'.');
+            }
+            else {
+                glyph = unkown;
+            }
         }
         AddGlyphToTextExtend(glyph, extend);
     }
@@ -183,14 +249,18 @@ void DeviceContext::AddGlyphToTextExtend(Glyph *glyph, TextExtend *extend)
     partialHeight = ceil(tmp / (double)glyph->GetUnitsPerEm());
     tmp = y * m_fontStack.top()->GetPointSize();
     y = ceil(tmp / (double)glyph->GetUnitsPerEm());
-    tmp = x * m_fontStack.top()->GetPointSize();
-    x = ceil(tmp / (double)glyph->GetUnitsPerEm());
+    // Following lines were commented out because result of these assignments were not used (dead store)
+    // tmp = x * m_fontStack.top()->GetPointSize();
+    // x = ceil(tmp / (double)glyph->GetUnitsPerEm());
 
     advX = glyph->GetHorizAdvX();
     tmp = advX * m_fontStack.top()->GetPointSize();
     advX = ceil(tmp / (double)glyph->GetUnitsPerEm());
 
-    extend->m_width += std::max(partialWidth + x, advX);
+    // Changed because the width should only be the sum of advX
+    // Alternatively we could add what is below 0 for the first and what is beyond the advx for the last
+    // extend->m_width += std::max(partialWidth + x, advX);
+    extend->m_width += (advX == 0) ? partialWidth : advX;
     extend->m_height = std::max(partialHeight, extend->m_height);
     extend->m_ascent = std::max(partialHeight + y, extend->m_ascent);
     extend->m_descent = std::max(-y, extend->m_descent);

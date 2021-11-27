@@ -42,28 +42,23 @@ public:
      * Reset method resets all attribute classes
      */
     ///@{
-    Layer(int n = 1);
+    Layer();
     virtual ~Layer();
-    virtual void Reset();
-    virtual std::string GetClassName() const { return "Layer"; }
-    virtual ClassId GetClassId() const { return LAYER; }
+    Object *Clone() const override { return new Layer(*this); }
+    void Reset() override;
+    std::string GetClassName() const override { return "Layer"; }
     ///@}
 
     /**
-     * Do not copy children for layers
+     * Overriding CloneReset() method to be called after copy / assignment calls.
      */
-    virtual bool CopyChildren() const { return false; }
-
-    /**
-     * Overriding CopyReset() method to be called after copy / assignment calls.
-     */
-    virtual void CopyReset();
+    void CloneReset() override;
 
     /**
      * @name Methods for adding allowed content
      */
     ///@{
-    virtual void AddChild(Object *object);
+    bool IsSupportedChild(Object *object) override;
     ///@}
 
     /**
@@ -85,6 +80,13 @@ public:
     Clef *GetClef(LayerElement *test);
 
     /**
+     * Get the current clef based on facsimile for the test element.
+     * This goes back by facsimile position until a clef is found.
+     * Returns NULL if a clef cannot be found via this method.
+     */
+    Clef *GetClefFacs(LayerElement *test);
+
+    /**
      * Return the clef offset for the position x.
      * The method uses Layer::GetClef first to find the clef before test.
      */
@@ -98,8 +100,39 @@ public:
     void SetDrawingStemDir(data_STEMDIRECTION stemDirection) { m_drawingStemDir = stemDirection; }
     data_STEMDIRECTION GetDrawingStemDir(LayerElement *element);
     data_STEMDIRECTION GetDrawingStemDir(const ArrayOfBeamElementCoords *coords);
-    data_STEMDIRECTION GetDrawingStemDir(double time, double duration, Measure *measure, int staff);
     ///@}
+
+    /**
+     * @name Get the layers used for the duration of an element.
+     * Takes into account cross-staff situations: cross staff layers have negative N.
+     */
+    ///@{
+    std::set<int> GetLayersNForTimeSpanOf(LayerElement *element);
+    int GetLayerCountForTimeSpanOf(LayerElement *element);
+    ///@}
+
+    /**
+     * @name Get the layers used within a time span.
+     * Takes into account cross-staff situations: cross staff layers have negative N.
+     */
+    ///@{
+    std::set<int> GetLayersNInTimeSpan(double time, double duration, Measure *measure, int staff);
+    int GetLayerCountInTimeSpan(double time, double duration, Measure *measure, int staff);
+    ///@}
+
+    /**
+     * Get the list of the layer elements for the duration of an element
+     * Takes into account cross-staff situations.
+     * If excludeCurrent is specified, gets the list of layer elements for all layers except current
+     */
+    ListOfObjects GetLayerElementsForTimeSpanOf(LayerElement *element, bool excludeCurrent = false);
+
+    /**
+     * Get the list of the layer elements used within a time span.
+     * Takes into account cross-staff situations.
+     */
+    ListOfObjects GetLayerElementsInTimeSpan(
+        double time, double duration, Measure *measure, int staff, bool excludeCurrent);
 
     Clef *GetCurrentClef() const;
     KeySig *GetCurrentKeySig() const;
@@ -119,7 +152,11 @@ public:
     KeySig *GetStaffDefKeySig() { return m_staffDefKeySig; }
     Mensur *GetStaffDefMensur() { return m_staffDefMensur; }
     MeterSig *GetStaffDefMeterSig() { return m_staffDefMeterSig; }
-    bool HasStaffDef() { return (m_staffDefClef || m_staffDefKeySig || m_staffDefMensur || m_staffDefMeterSig); }
+    MeterSigGrp *GetStaffDefMeterSigGrp() { return m_staffDefMeterSigGrp; }
+    bool HasStaffDef()
+    {
+        return (m_staffDefClef || m_staffDefKeySig || m_staffDefMensur || m_staffDefMeterSig || m_staffDefMeterSigGrp);
+    }
 
     /**
      * Set drawing clef, keysig and mensur if necessary and if available.
@@ -138,61 +175,76 @@ public:
             m_cautionStaffDefClef || m_cautionStaffDefKeySig || m_cautionStaffDefMensur || m_cautionStaffDefMeterSig);
     }
 
+    /**
+     * @name Setter and getter for the cross-staff flags
+     */
+    //@{
+    void SetCrossStaffFromAbove(bool crossStaff) { m_crossStaffFromAbove = crossStaff; }
+    bool HasCrossStaffFromAbove() const { return m_crossStaffFromAbove; }
+    void SetCrossStaffFromBelow(bool crossStaff) { m_crossStaffFromBelow = crossStaff; }
+    bool HasCrossStaffFromBelow() const { return m_crossStaffFromBelow; }
+    ///@}
+
     //----------//
     // Functors //
     //----------//
 
     /**
+     * See Object::ConvertMarkupArtic
+     */
+    int ConvertMarkupArticEnd(FunctorParams *functorParams) override;
+
+    /**
      * See Object::ConvertToCastOffMensural
      */
-    virtual int ConvertToCastOffMensural(FunctorParams *params);
+    int ConvertToCastOffMensural(FunctorParams *functorParams) override;
 
     /**
      * See Object::ConvertToUnCastOffMensural
      */
-    virtual int ConvertToUnCastOffMensural(FunctorParams *params);
+    int ConvertToUnCastOffMensural(FunctorParams *functorParams) override;
 
     /**
-     * See Object::UnsetCurrentScoreDef
+     * See Object::UnscoreDefSetCurrent
      */
-    virtual int UnsetCurrentScoreDef(FunctorParams *functorParams);
+    int ScoreDefUnsetCurrent(FunctorParams *functorParams) override;
 
     /**
      * See Object::ResetHorizontalAlignment
      */
-    virtual int ResetHorizontalAlignment(FunctorParams *functorParams);
+    int ResetHorizontalAlignment(FunctorParams *functorParams) override;
 
     /**
      * See Object::AlignHorizontally
      */
-    virtual int AlignHorizontally(FunctorParams *functorParams);
+    int AlignHorizontally(FunctorParams *functorParams) override;
 
     /**
      * See Object::AlignHorizontallyEnd
      */
-    virtual int AlignHorizontallyEnd(FunctorParams *functorParams);
+    int AlignHorizontallyEnd(FunctorParams *functorParams) override;
 
     /**
      * See Object::PrepareProcessingLists
      */
-    virtual int PrepareProcessingLists(FunctorParams *functorParams);
+    int PrepareProcessingLists(FunctorParams *functorParams) override;
 
     /**
      * See Object::PrepareRpt
      */
-    virtual int PrepareRpt(FunctorParams *functorParams);
-
-    /**
-     * See Object::CalcStem
-     */
-    virtual int CalcStem(FunctorParams *);
+    int PrepareRpt(FunctorParams *functorParams) override;
 
     /**
      * See Object::CalcOnsetOffset
      */
     ///@{
-    virtual int CalcOnsetOffset(FunctorParams *functorParams);
+    int CalcOnsetOffset(FunctorParams *functorParams) override;
     ///@}
+
+    /**
+     * See Object::ResetDrawing
+     */
+    int ResetDrawing(FunctorParams *functorParams) override;
 
 private:
     //
@@ -200,15 +252,22 @@ public:
     //
 private:
     /**
-     *
+     * The drawing stem direction of the layer based on the number of layers in the staff
      */
     data_STEMDIRECTION m_drawingStemDir;
+
+    /**
+     * Two flags indicating when a layer is also used from cross-staff content from below or above
+     */
+    bool m_crossStaffFromBelow;
+    bool m_crossStaffFromAbove;
 
     /** */
     Clef *m_staffDefClef;
     KeySig *m_staffDefKeySig;
     Mensur *m_staffDefMensur;
     MeterSig *m_staffDefMeterSig;
+    MeterSigGrp *m_staffDefMeterSigGrp;
     bool m_drawKeySigCancellation;
 
     /** */

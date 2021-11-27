@@ -28,8 +28,12 @@ namespace vrv {
 // MRpt
 //----------------------------------------------------------------------------
 
-MRpt::MRpt() : LayerElement("mrpt-")
+static const ClassRegistrar<MRpt> s_factory("mRpt", MRPT);
+
+MRpt::MRpt() : LayerElement(MRPT, "mrpt-"), AttColor()
 {
+    RegisterAttClass(ATT_COLOR);
+
     Reset();
 }
 
@@ -38,6 +42,7 @@ MRpt::~MRpt() {}
 void MRpt::Reset()
 {
     LayerElement::Reset();
+    ResetColor();
 
     m_drawingMeasureCount = 0;
 }
@@ -48,7 +53,7 @@ void MRpt::Reset()
 
 int MRpt::GenerateMIDI(FunctorParams *functorParams)
 {
-    // GenerateMIDIParams *params = dynamic_cast<GenerateMIDIParams *>(functorParams);
+    // GenerateMIDIParams *params = vrv_params_cast<GenerateMIDIParams *>(functorParams);
     // assert(params);
 
     LogWarning("MRpt produces empty MIDI output");
@@ -58,7 +63,7 @@ int MRpt::GenerateMIDI(FunctorParams *functorParams)
 
 int MRpt::PrepareRpt(FunctorParams *functorParams)
 {
-    PrepareRptParams *params = dynamic_cast<PrepareRptParams *>(functorParams);
+    PrepareRptParams *params = vrv_params_cast<PrepareRptParams *>(functorParams);
     assert(params);
 
     // If multiNumber is not true, nothing needs to be done
@@ -68,11 +73,11 @@ int MRpt::PrepareRpt(FunctorParams *functorParams)
 
     // If this is the first one, number has to be 2
     if (params->m_currentMRpt == NULL) {
-        this->m_drawingMeasureCount = 2;
+        m_drawingMeasureCount = 2;
     }
     // Otherwise increment it
     else {
-        this->m_drawingMeasureCount = params->m_currentMRpt->m_drawingMeasureCount + 1;
+        m_drawingMeasureCount = params->m_currentMRpt->m_drawingMeasureCount + 1;
     }
     params->m_currentMRpt = this;
     return FUNCTOR_CONTINUE;

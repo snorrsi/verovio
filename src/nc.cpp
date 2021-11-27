@@ -13,7 +13,7 @@
 
 //----------------------------------------------------------------------------
 
-#include "attcomparison.h"
+#include "comparison.h"
 #include "doc.h"
 #include "elementpart.h"
 #include "staff.h"
@@ -25,8 +25,16 @@ namespace vrv {
 // Nc
 //----------------------------------------------------------------------------
 
+static const ClassRegistrar<Nc> s_factory("nc", NC);
+
 Nc::Nc()
-    : LayerElement("nc-"), DurationInterface(), PitchInterface(), PositionInterface(), AttColor(), AttIntervalMelodic()
+    : LayerElement(NC, "nc-")
+    , DurationInterface()
+    , PitchInterface()
+    , PositionInterface()
+    , AttColor()
+    , AttIntervalMelodic()
+    , AttNcForm()
 
 {
     RegisterInterface(DurationInterface::GetAttClasses(), DurationInterface::IsInterface());
@@ -34,6 +42,7 @@ Nc::Nc()
     RegisterInterface(PositionInterface::GetAttClasses(), PositionInterface::IsInterface());
     RegisterAttClass(ATT_COLOR);
     RegisterAttClass(ATT_INTERVALMELODIC);
+    RegisterAttClass(ATT_NCFORM);
 
     Reset();
 }
@@ -48,6 +57,7 @@ void Nc::Reset()
     PositionInterface::Reset();
     ResetColor();
     ResetIntervalMelodic();
+    ResetNcForm();
 }
 
 } // namespace vrv

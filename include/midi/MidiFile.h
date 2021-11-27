@@ -1,7 +1,7 @@
 //
 // Programmer:    Craig Stuart Sapp <craig@ccrma.stanford.edu>
 // Creation Date: Fri Nov 26 14:12:01 PST 1999
-// Last Modified: Sat Apr 21 10:52:19 PDT 2018 Removed using namespace std;
+// Last Modified: Mon Jan 18 20:54:04 PST 2021 Added readSmf().
 // Filename:      midifile/include/MidiFile.h
 // Website:       http://midifile.sapp.org
 // Syntax:        C++11
@@ -39,7 +39,7 @@ class _TickTime {
 class MidiFile {
 	public:
 		               MidiFile                    (void);
-		               MidiFile                    (const std::string& aFile);
+		               MidiFile                    (const std::string& filename);
 		               MidiFile                    (std::istream& input);
 		               MidiFile                    (const MidiFile& other);
 		               MidiFile                    (MidiFile&& other);
@@ -49,15 +49,25 @@ class MidiFile {
 		MidiFile&      operator=                   (const MidiFile& other);
 		MidiFile&      operator=                   (MidiFile&& other);
 
-		// reading/writing functions:
+		// Reading/writing functions:
+
+		// Auto-detected SMF or ASCII-encoded SMF (decoded with Binasc class):
 		bool           read                        (const std::string& filename);
 		bool           read                        (std::istream& instream);
+		bool           readBase64                  (const std::string& base64data);
+		bool           readBase64                  (std::istream& instream);
+
+		// Only allow Standard MIDI File input:
+		bool           readSmf                     (const std::string& filename);
+		bool           readSmf                     (std::istream& instream);
+
 		bool           write                       (const std::string& filename);
 		bool           write                       (std::ostream& out);
-		bool           writeHex                    (const std::string& filename,
-		                                            int width = 25);
-		bool           writeHex                    (std::ostream& out,
-		                                            int width = 25);
+		bool           writeBase64                 (const std::string& out, int width = 0);
+		bool           writeBase64                 (std::ostream& out, int width = 0);
+		std::string    getBase64                   (int width = 0);
+		bool           writeHex                    (const std::string& filename, int width = 25);
+		bool           writeHex                    (std::ostream& out, int width = 25);
 		bool           writeBinasc                 (const std::string& filename);
 		bool           writeBinasc                 (std::ostream& out);
 		bool           writeBinascWithComments     (const std::string& filename);
@@ -77,20 +87,19 @@ class MidiFile {
 		void             deltaTicks                (void);
 		void             makeAbsoluteTicks         (void);
 		void             absoluteTicks             (void);
-		int              getTickState              (void);
-		int              isDeltaTicks              (void);
-		int              isAbsoluteTicks           (void);
-		int              getMaxTick                (void);
+		int              getTickState              (void) const;
+		bool             isDeltaTicks              (void) const;
+		bool             isAbsoluteTicks           (void) const;
 
 		// join/split track functionality:
 		void             joinTracks                (void);
 		void             splitTracks               (void);
 		void             splitTracksByChannel      (void);
-		int              getTrackState             (void);
-		int              hasJoinedTracks           (void);
-		int              hasSplitTracks            (void);
-		int              getSplitTrack             (int track, int index);
-		int              getSplitTrack             (int index);
+		int              getTrackState             (void) const;
+		int              hasJoinedTracks           (void) const;
+		int              hasSplitTracks            (void) const;
+		int              getSplitTrack             (int track, int index) const;
+		int              getSplitTrack             (int index) const;
 
 		// track sorting funcionality:
 		void             sortTrack                 (int track);
@@ -120,9 +129,9 @@ class MidiFile {
 		double           getTimeInSeconds          (int aTrack, int anIndex);
 		double           getTimeInSeconds          (int tickvalue);
 		double           getAbsoluteTickTime       (double starttime);
-		double           getTotalTimeInSeconds     (void);
-		int              getTotalTimeInTicks       (void);
-		double           getTotalTimeInQuarters    (void);
+		int              getFileDurationInTicks    (void);
+		double           getFileDurationInQuarters (void);
+		double           getFileDurationInSeconds  (void);
 
 		// note-analysis functions:
 		int              linkNotePairs             (void);
@@ -131,13 +140,15 @@ class MidiFile {
 
 		// filename functions:
 		void             setFilename               (const std::string& aname);
-		const char*      getFilename               (void);
+		const char*      getFilename               (void) const;
 
 		// event functionality:
 		MidiEvent*       addEvent                  (int aTrack, int aTick,
 		                                            std::vector<uchar>& midiData);
 		MidiEvent*       addEvent                  (MidiEvent& mfevent);
+		MidiEvent*       addEvent                  (int aTrack, MidiEvent& mfevent);
 		MidiEvent&       getEvent                  (int aTrack, int anIndex);
+		const MidiEvent& getEvent                  (int aTrack, int anIndex) const;
 		int              getEventCount             (int aTrack) const;
 		int              getNumEvents              (int aTrack) const;
 		void             allocateEvents            (int track, int aSize);
@@ -164,6 +175,10 @@ class MidiFile {
 		MidiEvent*        addPitchBend            (int aTrack, int aTick,
 		                                           int aChannel, double amount);
 
+		// RPN settings:
+		void              setPitchBendRange       (int aTrack, int aTick,
+		                                           int aChannel, double range);
+
 		// Controller message adding convenience functions:
 		MidiEvent*        addSustain              (int aTrack, int aTick,
 		                                           int aChannel, int value);
@@ -179,38 +194,38 @@ class MidiFile {
 		                                           int aChannel);
 
 		// Meta-event adding convenience functions:
-		MidiEvent*      addMetaEvent              (int aTrack, int aTick,
+		MidiEvent*         addMetaEvent           (int aTrack, int aTick,
 		                                           int aType,
 		                                           std::vector<uchar>& metaData);
-		MidiEvent*      addMetaEvent              (int aTrack, int aTick,
+		MidiEvent*         addMetaEvent           (int aTrack, int aTick,
 		                                           int aType,
 		                                           const std::string& metaData);
-		MidiEvent*      addText                   (int aTrack, int aTick,
+		MidiEvent*         addText                (int aTrack, int aTick,
 		                                           const std::string& text);
-		MidiEvent*      addCopyright              (int aTrack, int aTick,
+		MidiEvent*         addCopyright           (int aTrack, int aTick,
 		                                           const std::string& text);
-		MidiEvent*      addTrackName              (int aTrack, int aTick,
+		MidiEvent*         addTrackName           (int aTrack, int aTick,
 		                                           const std::string& name);
-		MidiEvent*      addInstrumentName         (int aTrack, int aTick,
+		MidiEvent*         addInstrumentName      (int aTrack, int aTick,
 		                                           const std::string& name);
-		MidiEvent*      addLyric                  (int aTrack, int aTick,
+		MidiEvent*         addLyric               (int aTrack, int aTick,
 		                                           const std::string& text);
-		MidiEvent*      addMarker                 (int aTrack, int aTick,
+		MidiEvent*         addMarker              (int aTrack, int aTick,
 		                                           const std::string& text);
-		MidiEvent*      addCue                    (int aTrack, int aTick,
+		MidiEvent*         addCue                 (int aTrack, int aTick,
 		                                           const std::string& text);
-		MidiEvent*      addTempo                  (int aTrack, int aTick,
+		MidiEvent*         addTempo               (int aTrack, int aTick,
 		                                           double aTempo);
-		MidiEvent*      addTimeSignature          (int aTrack, int aTick,
+		MidiEvent*         addTimeSignature       (int aTrack, int aTick,
 		                                           int top, int bottom,
 		                                           int clocksPerClick = 24,
 		                                           int num32dsPerQuarter = 8);
-		MidiEvent*      addCompoundTimeSignature  (int aTrack, int aTick,
+		MidiEvent*         addCompoundTimeSignature(int aTrack, int aTick,
 		                                           int top, int bottom,
 		                                           int clocksPerClick = 36,
 		                                           int num32dsPerQuarter = 8);
 
-		uchar           readByte                  (std::istream& input);
+		uchar              readByte               (std::istream& input);
 
 		// static functions:
 		static ushort        readLittleEndian2Bytes  (std::istream& input);
@@ -250,9 +265,6 @@ class MidiFile {
 		// in MIDI file track data.
 		int m_ticksPerQuarterNote = 120;
 
-		// m_trackCount == the number of tracks in the file.
-		int m_trackCount = 1;
-
 		// m_theTrackState == state variable for whether the tracks
 		// are joined or split.
 		int m_theTrackState = TRACK_STATE_SPLIT;
@@ -269,7 +281,7 @@ class MidiFile {
 		// m_timemapvalid ==
 		bool m_timemapvalid = false;
 
-		// m_timemap == 
+		// m_timemap ==
 		std::vector<_TickTime> m_timemap;
 
 		// m_rwstatus == True if last read was successful, false if a problem.
@@ -279,21 +291,25 @@ class MidiFile {
 		bool m_linkedEventsQ = false;
 
 	private:
-		int        extractMidiData                 (std::istream& inputfile,
-		                                            std::vector<uchar>& array,
-		                                            uchar& runningCommand);
-		ulong      readVLValue                     (std::istream& inputfile);
-		ulong      unpackVLV                       (uchar a = 0, uchar b = 0,
-		                                            uchar c = 0, uchar d = 0,
-		                                            uchar e = 0);
-		void       writeVLValue                    (long aValue,
-		                                            std::vector<uchar>& data);
-		int        makeVLV                         (uchar *buffer, int number);
-		static int ticksearch                      (const void* A, const void* B);
-		static int secondsearch                    (const void* A, const void* B);
-		void       buildTimeMap                    (void);
-		double     linearTickInterpolationAtSecond (double seconds);
-		double     linearSecondInterpolationAtTick (int ticktime);
+		int         extractMidiData                 (std::istream& inputfile,
+		                                             std::vector<uchar>& array,
+		                                             uchar& runningCommand);
+		ulong       readVLValue                     (std::istream& inputfile);
+		ulong       unpackVLV                       (uchar a = 0, uchar b = 0,
+		                                             uchar c = 0, uchar d = 0,
+		                                             uchar e = 0);
+		void        writeVLValue                    (long aValue,
+		                                             std::vector<uchar>& data);
+		int         makeVLV                         (uchar *buffer, int number);
+		static int  ticksearch                      (const void* A, const void* B);
+		static int  secondsearch                    (const void* A, const void* B);
+		void        buildTimeMap                    (void);
+		double      linearTickInterpolationAtSecond (double seconds);
+		double      linearSecondInterpolationAtTick (int ticktime);
+		std::string base64Encode                    (const std::string &input);
+		std::string base64Decode                    (const std::string &input);
+		static const std::string encodeLookup;
+		static const std::vector<int> decodeLookup;
 };
 
 } // end of namespace smf

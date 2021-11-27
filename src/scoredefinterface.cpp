@@ -25,35 +25,23 @@ namespace vrv {
 
 ScoreDefInterface::ScoreDefInterface()
     : Interface()
-    , AttCleffingLog()
-    , AttCleffingVis()
-    , AttKeySigDefaultAnl()
-    , AttKeySigDefaultLog()
-    , AttKeySigDefaultVis()
     , AttLyricStyle()
     , AttMeasureNumbers()
-    , AttMensuralLog()
-    , AttMensuralShared()
-    , AttMensuralVis()
-    , AttMeterSigDefaultLog()
-    , AttMeterSigDefaultVis()
     , AttMidiTempo()
     , AttMultinumMeasures()
+    , AttPianoPedals()
+    , AttSpacing()
+    , AttSystems()
 {
-    RegisterInterfaceAttClass(ATT_CLEFFINGLOG);
-    RegisterInterfaceAttClass(ATT_CLEFFINGVIS);
-    RegisterInterfaceAttClass(ATT_KEYSIGDEFAULTANL);
-    RegisterInterfaceAttClass(ATT_KEYSIGDEFAULTLOG);
-    RegisterInterfaceAttClass(ATT_KEYSIGDEFAULTVIS);
     RegisterInterfaceAttClass(ATT_LYRICSTYLE);
     RegisterInterfaceAttClass(ATT_MEASURENUMBERS);
-    RegisterInterfaceAttClass(ATT_MENSURALLOG);
-    RegisterInterfaceAttClass(ATT_MENSURALSHARED);
-    RegisterInterfaceAttClass(ATT_MENSURALVIS);
     RegisterInterfaceAttClass(ATT_METERSIGDEFAULTLOG);
     RegisterInterfaceAttClass(ATT_METERSIGDEFAULTVIS);
     RegisterInterfaceAttClass(ATT_MIDITEMPO);
     RegisterInterfaceAttClass(ATT_MULTINUMMEASURES);
+    RegisterInterfaceAttClass(ATT_PIANOPEDALS);
+    RegisterInterfaceAttClass(ATT_SPACING);
+    RegisterInterfaceAttClass(ATT_SYSTEMS);
 
     Reset();
 }
@@ -62,20 +50,13 @@ ScoreDefInterface::~ScoreDefInterface() {}
 
 void ScoreDefInterface::Reset()
 {
-    ResetCleffingLog();
-    ResetCleffingVis();
-    ResetKeySigDefaultAnl();
-    ResetKeySigDefaultLog();
-    ResetKeySigDefaultVis();
     ResetLyricStyle();
     ResetMeasureNumbers();
-    ResetMensuralLog();
-    ResetMensuralShared();
-    ResetMensuralVis();
-    ResetMeterSigDefaultLog();
-    ResetMeterSigDefaultVis();
     ResetMidiTempo();
     ResetMultinumMeasures();
+    ResetPianoPedals();
+    ResetSpacing();
+    ResetSystems();
 }
 
 } // namespace vrv

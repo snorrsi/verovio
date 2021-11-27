@@ -13,6 +13,8 @@
 
 namespace vrv {
 
+enum class BarLinePosition { None, Left, Right };
+
 //----------------------------------------------------------------------------
 // BarLine
 //----------------------------------------------------------------------------
@@ -20,7 +22,11 @@ namespace vrv {
 /**
  * This class models the MEI <barLine> element.
  */
-class BarLine : public LayerElement, public AttBarLineLog, public AttColor, public AttVisibility {
+class BarLine : public LayerElement,
+                public AttBarLineLog,
+                public AttColor,
+                public AttNNumberLike,
+                public AttVisibility {
 public:
     /**
      * @name Constructors, destructors, and other standard methods
@@ -28,15 +34,15 @@ public:
      */
     ///@{
     BarLine();
+    BarLine(ClassId classId);
     virtual ~BarLine();
-    virtual void Reset();
-    virtual Object *Clone() const { return new BarLine(*this); }
-    virtual std::string GetClassName() const { return "BarLine"; }
-    virtual ClassId GetClassId() const { return BARLINE; }
+    Object *Clone() const override { return new BarLine(*this); }
+    void Reset() override;
+    std::string GetClassName() const override { return "BarLine"; }
     ///@}
 
     /** Override the method since alignment is required */
-    virtual bool HasToBeAligned() const { return true; }
+    bool HasToBeAligned() const override { return true; }
 
     /**
      * Use to set the alignment for the Measure BarLine members.
@@ -49,6 +55,12 @@ public:
      */
     bool HasRepetitionDots() const;
 
+    /**
+     * @name Get and set the position
+     */
+    BarLinePosition GetPosition() const { return m_position; }
+    void SetPosition(BarLinePosition position) { m_position = position; }
+
     //----------//
     // Functors //
     //----------//
@@ -56,45 +68,15 @@ public:
     /**
      * See Object::ConvertToCastOffMensural
      */
-    virtual int ConvertToCastOffMensural(FunctorParams *params);
+    int ConvertToCastOffMensural(FunctorParams *functorParams) override;
 
 private:
     //
 public:
     //
 private:
-};
-
-//----------------------------------------------------------------------------
-// BarLineAttr
-//----------------------------------------------------------------------------
-
-/**
- * This class models the barLine related attributes of a MEI measure.
- */
-class BarLineAttr : public BarLine {
-public:
-    /**
-     * @name Constructors, destructors, and other standard methods
-     * No Reset() method is required.
-     */
-    ///@{
-    BarLineAttr();
-    virtual ~BarLineAttr();
-    virtual Object *Clone() const { return new BarLineAttr(*this); }
-    virtual std::string GetClassName() const { return "BarLineAttr"; }
-    virtual ClassId GetClassId() const { return (m_isLeft ? BARLINE_ATTR_LEFT : BARLINE_ATTR_RIGHT); }
-    ///@}
-
-    void SetLeft() { m_isLeft = true; }
-
-private:
-    //
-public:
-    //
-private:
-    /** A flag for left barlines (right if false) */
-    bool m_isLeft;
+    /** The barline position (left/right) */
+    BarLinePosition m_position;
 };
 
 } // namespace vrv

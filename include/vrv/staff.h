@@ -9,6 +9,7 @@
 #define __VRV_STAFF_H__
 
 #include "atts_shared.h"
+#include "facsimileinterface.h"
 #include "object.h"
 
 namespace vrv {
@@ -20,6 +21,7 @@ class StaffAlignment;
 class StaffDef;
 class Syl;
 class TimeSpanningInterface;
+class Tuning;
 
 //----------------------------------------------------------------------------
 // Staff
@@ -31,7 +33,7 @@ class TimeSpanningInterface;
  * It contains Measure objects.
  * For unmeasured music, one single Measure is added for simplifying internal processing
  */
-class Staff : public Object, public AttNInteger, public AttTyped, public AttVisibility {
+class Staff : public Object, public FacsimileInterface, public AttNInteger, public AttTyped, public AttVisibility {
 
 public:
     /**
@@ -41,20 +43,22 @@ public:
     ///@{
     Staff(int n = 1);
     virtual ~Staff();
-    virtual void Reset();
-    virtual std::string GetClassName() const { return "Staff"; }
-    virtual ClassId GetClassId() const { return STAFF; }
+    Object *Clone() const override { return new Staff(*this); }
+    void Reset() override;
+    std::string GetClassName() const override { return "Staff"; }
     ///@}
 
     /**
-     * Do not copy children for layers
+     * Overriding CloneReset() method to be called after copy / assignment calls.
      */
-    virtual bool CopyChildren() const { return false; }
+    void CloneReset() override;
+
+    FacsimileInterface *GetFacsimileInterface() override { return dynamic_cast<FacsimileInterface *>(this); }
 
     /**
-     * Overriding CopyReset() method to be called after copy / assignment calls.
+     * Return a const pointer to the children
      */
-    virtual void CopyReset();
+    const ArrayOfObjects *GetChildren(bool docChildren = true) const override;
 
     /**
      * Delete all the legder line arrays.
@@ -65,20 +69,37 @@ public:
      * @name Methods for adding allowed content
      */
     ///@{
-    virtual void AddChild(Object *object);
+    bool IsSupportedChild(Object *object) override;
     ///@}
 
     /**
-     * @name Get the Y drawing position
+     * @name Get the X, Y, and angle of drawing position
      */
     ///@{
-    virtual int GetDrawingY() const;
+    int GetDrawingX() const override;
+    int GetDrawingY() const override;
+    virtual double GetDrawingRotate() const;
+    ///@}
+
+    /**
+     * Adjust drawingStaffSize based on rotate angle
+     */
+    void AdjustDrawingStaffSize();
 
     /**
      * Check if the staff is currently visible.
      * Looks for the parent system and its current drawing scoreDef
      */
     bool DrawingIsVisible();
+
+    /**
+     * @name Get notation type
+     */
+    ///@{
+    bool IsMensural();
+    bool IsNeume();
+    bool IsTablature();
+    ///@}
 
     /**
      * Return the index position of the staff in its measure parent
@@ -96,13 +117,13 @@ public:
     StaffAlignment *GetAlignment() const { return m_staffAlignment; }
 
     /**
-     * Return the ledger line arrays (NULL if none)
+     * Return the ledger line arrays
      */
     ///@{
-    ArrayOfLedgerLines *GetLedgerLinesAbove() { return m_ledgerLinesAbove; }
-    ArrayOfLedgerLines *GetLedgerLinesAboveCue() { return m_ledgerLinesAboveCue; }
-    ArrayOfLedgerLines *GetLedgerLinesBelow() { return m_ledgerLinesBelow; }
-    ArrayOfLedgerLines *GetLedgerLinesBelowCue() { return m_ledgerLinesBelowCue; }
+    const ArrayOfLedgerLines &GetLedgerLinesAbove() { return m_ledgerLinesAbove; }
+    const ArrayOfLedgerLines &GetLedgerLinesAboveCue() { return m_ledgerLinesAboveCue; }
+    const ArrayOfLedgerLines &GetLedgerLinesBelow() { return m_ledgerLinesBelow; }
+    const ArrayOfLedgerLines &GetLedgerLinesBelowCue() { return m_ledgerLinesBelowCue; }
     ///@}
 
     /**
@@ -110,9 +131,28 @@ public:
      * If necessary creates the ledger line array.
      */
     ///@{
-    void AddLegerLineAbove(int count, int left, int right, bool cueSize);
-    void AddLegerLineBelow(int count, int left, int right, bool cueSize);
+    void AddLedgerLineAbove(int count, int left, int right, int extension, bool cueSize);
+    void AddLedgerLineBelow(int count, int left, int right, int extension, bool cueSize);
     ///@}
+
+    /**
+     * Used for calculating clustered information/dot position.
+     * The *Doc is the parent doc but passed as param in order to avoid look-up
+     */
+    bool IsOnStaffLine(int y, Doc *doc);
+
+    /**
+     * Find the nearest unit position in the direction indicated by place.
+     * The *Doc is the parent doc but passed as param in order to avoid look-up
+     */
+    int GetNearestInterStaffPosition(int y, Doc *doc, data_STAFFREL place);
+
+    /**
+     * Set staff parameters based on
+     * facsimile information (if it
+     * exists).
+     */
+    virtual void SetFromFacsimile(Doc *doc);
 
     //----------//
     // Functors //
@@ -121,70 +161,96 @@ public:
     /**
      * See Object::ConvertToCastOffMensural
      */
-    virtual int ConvertToCastOffMensural(FunctorParams *params);
+    int ConvertToCastOffMensural(FunctorParams *functorParams) override;
 
     /**
-     * See Object::UnsetCurrentScoreDef
+     * See Object::UnscoreDefSetCurrent
      */
-    virtual int UnsetCurrentScoreDef(FunctorParams *functorParams);
+    int ScoreDefUnsetCurrent(FunctorParams *functorParams) override;
 
     /**
-     * See Object::OptimizeScoreDef
+     * See Object::ScoreDefOptimize
      */
-    virtual int OptimizeScoreDef(FunctorParams *functorParams);
+    int ScoreDefOptimize(FunctorParams *functorParams) override;
 
     /**
      * See Object::ResetVerticalAlignment
      */
-    virtual int ResetVerticalAlignment(FunctorParams *functorParams);
+    int ResetVerticalAlignment(FunctorParams *functorParams) override;
 
     /**
      * See Object::ApplyPPUFactor
      */
-    virtual int ApplyPPUFactor(FunctorParams *functorParams);
+    int ApplyPPUFactor(FunctorParams *functorParams) override;
 
     /**
      * See Object::AlignHorizontally
      */
-    virtual int AlignHorizontally(FunctorParams *functorParams);
+    int AlignHorizontally(FunctorParams *functorParams) override;
 
     /**
      * See Object::AlignVertically
      */
-    virtual int AlignVertically(FunctorParams *functorParams);
+    int AlignVertically(FunctorParams *functorParams) override;
+
+    /**
+     * See Object::CalcLedgerLinesEnd
+     */
+    int CalcLedgerLinesEnd(FunctorParams *functorParams) override;
 
     /**
      * See Object::FillStaffCurrentTimeSpanning
      */
-    virtual int FillStaffCurrentTimeSpanning(FunctorParams *functorParams);
+    int FillStaffCurrentTimeSpanning(FunctorParams *functorParams) override;
+
+    /**
+     * See Object::CastOffEncoding
+     */
+    int CastOffEncoding(FunctorParams *functorParams) override;
 
     /**
      * See Object::ResetDrawing
      */
-    virtual int ResetDrawing(FunctorParams *functorParams);
+    int ResetDrawing(FunctorParams *functorParams) override;
 
     /**
      * See Object::PrepareRpt
      */
-    virtual int PrepareRpt(FunctorParams *functorParams);
+    int PrepareRpt(FunctorParams *functorParams) override;
 
     /**
      * See Object::CalcOnsetOffset
      */
     ///@{
-    virtual int CalcOnsetOffset(FunctorParams *functorParams);
+    int CalcOnsetOffset(FunctorParams *functorParams) override;
     ///@}
+
+    /**
+     * See Object::CalcStem
+     */
+    int CalcStem(FunctorParams *functorParams) override;
 
     /**
      * See Object::AdjustSylSpacing
      */
-    virtual int AdjustSylSpacing(FunctorParams *functorParams);
+    int AdjustSylSpacing(FunctorParams *functorParams) override;
+
+    /**
+     * See Object::GenerateMIDI
+     */
+    int GenerateMIDI(FunctorParams *functorParams) override;
 
 private:
     /**
      * Add the ledger line dashes to the legderline array.
      */
-    void AddLegerLines(ArrayOfLedgerLines *lines, int count, int left, int right);
+    void AddLedgerLines(ArrayOfLedgerLines &lines, int count, int left, int right, int extension);
+
+    /**
+     * Shorten ledger lines which overlap with neighbors
+     */
+    void AdjustLedgerLines(
+        ArrayOfLedgerLines &lines, ArrayOfLedgerLines &cueLines, double cueScaling, int extension, int minExtension);
 
 public:
     /**
@@ -195,7 +261,7 @@ public:
     /**
      * Notation type (CMN, mensural, black mensural, etc.), from the staffDef
      */
-    int m_drawingNotationType;
+    data_NOTATIONTYPE m_drawingNotationType;
 
     /**
      * The drawing staff size (scale), from the staffDef
@@ -215,6 +281,8 @@ public:
 
     StaffDef *m_drawingStaffDef;
 
+    Tuning *m_drawingTuning;
+
 private:
     /**
      * A pointer to a StaffAlignment for aligning the staves
@@ -222,13 +290,13 @@ private:
     StaffAlignment *m_staffAlignment;
 
     /**
-     * A pointer to the legder lines (above / below and normal / cue)
+     * The legder lines (above / below and normal / cue)
      */
     ///@{
-    ArrayOfLedgerLines *m_ledgerLinesAbove;
-    ArrayOfLedgerLines *m_ledgerLinesBelow;
-    ArrayOfLedgerLines *m_ledgerLinesAboveCue;
-    ArrayOfLedgerLines *m_ledgerLinesBelowCue;
+    ArrayOfLedgerLines m_ledgerLinesAbove;
+    ArrayOfLedgerLines m_ledgerLinesBelow;
+    ArrayOfLedgerLines m_ledgerLinesAboveCue;
+    ArrayOfLedgerLines m_ledgerLinesBelowCue;
     ///@}
 };
 
@@ -257,7 +325,7 @@ public:
      * Add a dash to the ledger line object.
      * If necessary merges overlapping dashes.
      */
-    void AddDash(int left, int right);
+    void AddDash(int left, int right, int extension);
 
 protected:
     //
@@ -267,7 +335,7 @@ public:
     /**
      * A list of dashes relative to the staff position.
      */
-    std::list<std::pair<int, int> > m_dashes;
+    std::list<std::pair<int, int>> m_dashes;
 
 protected:
     //

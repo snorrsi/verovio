@@ -13,23 +13,28 @@
 //----------------------------------------------------------------------------
 
 #include "accid.h"
+#include "atts_externalsymbols.h"
+#include "atts_frettab.h"
 #include "atts_mensural.h"
+#include "atts_midi.h"
 #include "atts_shared.h"
 #include "beam.h"
 #include "chord.h"
 #include "durationinterface.h"
 #include "layerelement.h"
 #include "pitchinterface.h"
+#include "transposition.h"
 
 namespace vrv {
 
 class Accid;
 class Chord;
-class Slur;
-class Tie;
-class Verse;
 class Note;
-typedef std::vector<Note *> ChordCluster;
+class Slur;
+class TabGrp;
+class Tie;
+class TransPitch;
+class Verse;
 
 //----------------------------------------------------------------------------
 // Note
@@ -46,8 +51,12 @@ class Note : public LayerElement,
              public AttColor,
              public AttColoration,
              public AttCue,
+             public AttExtSym,
              public AttGraced,
-             public AttNoteAnlMensural,
+             public AttMidiVelocity,
+             public AttNoteGesTab,
+             public AttNoteHeads,
+             public AttNoteVisMensural,
              public AttStems,
              public AttStemsCmn,
              public AttTiePresent,
@@ -60,18 +69,18 @@ public:
     ///@{
     Note();
     virtual ~Note();
-    virtual void Reset();
-    virtual std::string GetClassName() const { return "Note"; }
-    virtual ClassId GetClassId() const { return NOTE; }
+    Object *Clone() const override { return new Note(*this); }
+    void Reset() override;
+    std::string GetClassName() const override { return "Note"; }
     ///@}
 
     /**
      * @name Getter to interfaces
      */
     ///@{
-    virtual DurationInterface *GetDurationInterface() { return dynamic_cast<DurationInterface *>(this); }
-    virtual PitchInterface *GetPitchInterface() { return dynamic_cast<PitchInterface *>(this); }
-    virtual StemmedDrawingInterface *GetStemmedDrawingInterface()
+    DurationInterface *GetDurationInterface() override { return dynamic_cast<DurationInterface *>(this); }
+    PitchInterface *GetPitchInterface() override { return dynamic_cast<PitchInterface *>(this); }
+    StemmedDrawingInterface *GetStemmedDrawingInterface() override
     {
         return dynamic_cast<StemmedDrawingInterface *>(this);
     }
@@ -81,16 +90,26 @@ public:
      * Override the method since alignment is required.
      * For notes we want not to align notes within a ligature (except first and last)
      */
-    virtual bool HasToBeAligned() const;
+    bool HasToBeAligned() const override { return true; }
 
     /**
      * Add an element (a verse or an accid) to a note.
      * Only Verse and Accid elements will be actually added to the note.
      */
-    virtual void AddChild(Object *object);
+    bool IsSupportedChild(Object *object) override;
 
     /**
-     * @name Setter and getter for tie attribute and other pointers
+     * Overwritten method for note
+     */
+    void AddChild(Object *object) override;
+
+    /**
+     * Align dots shift for two notes. Should be used for unison notes to align dots positioning
+     */
+    void AlignDotsShift(Note *otherNote);
+
+    /**
+     * @name Setter and getter for accid attribute and other pointers
      */
     ///@{
     Accid *GetDrawingAccid();
@@ -106,6 +125,14 @@ public:
     ///@}
 
     /**
+     * Check if the note has ledger lines.
+     * If staff is passed, use it for getting the staff line number.
+     * Otherwise, it will look for the Staff ancestor.
+     * Set the value of ledger lines above or below.
+     */
+    bool HasLedgerLines(int &linesAbove, int &linesBelow, Staff *staff = NULL);
+
+    /**
      * Overriding functions to return information from chord parent if any
      */
     ///@{
@@ -115,10 +142,22 @@ public:
     ///@}
 
     /**
-     * Return true if the note is a unisson.
+     * Return the parent TabGrp is the note is part of one.
+     */
+    TabGrp *IsTabGrpNote() const;
+
+    /**
+     * @name Return the smufl string to use for a note give the notation type
+     */
+    ///@{
+    std::wstring GetTabFretString(data_NOTATIONTYPE notationType) const;
+    ///@}
+
+    /**
+     * Return true if the note is a unison.
      * If ignoreAccid is set to true then only @pname and @oct are compared.
      */
-    bool IsUnissonWith(Note *note, bool ignoreAccid = false);
+    bool IsUnisonWith(Note *note, bool ignoreAccid = false);
 
     /**
      * @name Setter and getter for the chord cluster and the position of the note
@@ -126,7 +165,7 @@ public:
     ///@{
     void SetCluster(ChordCluster *cluster, int position);
     ChordCluster *GetCluster() const { return m_cluster; }
-    ///}
+    ///@}
 
     /**
      * @name Setter and getter for the flipped note head flag
@@ -134,7 +173,7 @@ public:
     ///@{
     void SetFlippedNotehead(bool flippedNotehead) { m_flippedNotehead = flippedNotehead; }
     bool GetFlippedNotehead() const { return m_flippedNotehead; }
-    ///}
+    ///@}
 
     /**
      * Returns a single integer representing pitch and octave.
@@ -146,19 +185,25 @@ public:
      * If necessary look at the glyph anchor (if any).
      */
     ///@{
-    virtual Point GetStemUpSE(Doc *doc, int staffSize, bool isCueSize);
-    virtual Point GetStemDownNW(Doc *doc, int staffSize, bool isCueSize);
+    Point GetStemUpSE(Doc *doc, int staffSize, bool isCueSize) override;
+    Point GetStemDownNW(Doc *doc, int staffSize, bool isCueSize) override;
+    int CalcStemLenInThirdUnits(Staff *staff, data_STEMDIRECTION stemDir) override;
     ///@}
 
     /**
      * Return the SMuFL code for a mensural note looking at the staff notation type, the coloration and the duration
      */
-    wchar_t GetMensuralSmuflNoteHead();
+    wchar_t GetMensuralNoteheadGlyph() const;
+
+    /**
+     * Return a SMuFL code for the notehead
+     */
+    wchar_t GetNoteheadGlyph(const int duration) const;
 
     /**
      * Check if a note or its parent chord are visible
      */
-    bool IsVisible();
+    bool IsVisible() const;
 
     /**
      * MIDI timing information
@@ -169,82 +214,130 @@ public:
     void SetScoreTimeOffset(double scoreTime);
     void SetRealTimeOffsetSeconds(double timeInSeconds);
     void SetScoreTimeTiedDuration(double timeInSeconds);
-    void SetMIDIPitch(char pitch);
-    double GetScoreTimeOnset();
-    int GetRealTimeOnsetMilliseconds();
-    double GetScoreTimeOffset();
-    double GetScoreTimeTiedDuration();
-    int GetRealTimeOffsetMilliseconds();
-    double GetScoreTimeDuration();
-    char GetMIDIPitch();
+    void CalcMIDIPitch(int shift);
+    double GetScoreTimeOnset() const;
+    double GetRealTimeOnsetMilliseconds() const;
+    double GetScoreTimeOffset() const;
+    double GetScoreTimeTiedDuration() const;
+    double GetRealTimeOffsetMilliseconds() const;
+    double GetScoreTimeDuration() const;
+    char GetMIDIPitch() const;
     ///@}
+
+public:
+    //----------------//
+    // Static methods //
+    //----------------//
+
+    /**
+     * Assume that two notes from different layers are given occuring at the same time
+     * Returns true if one note has a ledger line that collides (or is quite close) to the other note's stem
+     */
+    static bool HandleLedgerLineStemCollision(Doc *doc, Staff *staff, Note *note1, Note *note2);
 
     //----------//
     // Functors //
     //----------//
 
     /**
-     * See Object::ConvertAnalyticalMarkup
+     * See Object::AdjustArtic
      */
-    virtual int ConvertAnalyticalMarkup(FunctorParams *functorParams);
+    int AdjustArtic(FunctorParams *functorParams) override;
+
+    /**
+     * See Object::ConvertMarkupAnalytical
+     */
+    int ConvertMarkupAnalytical(FunctorParams *functorParams) override;
+
+    /**
+     * See Object::CalcArtic
+     */
+    int CalcArtic(FunctorParams *functorParams) override;
 
     /**
      * See Object::CalcStem
      */
-    virtual int CalcStem(FunctorParams *functorParams);
+    int CalcStem(FunctorParams *functorParams) override;
 
     /**
      * See Object::CalcChordNoteHeads
      */
-    virtual int CalcChordNoteHeads(FunctorParams *functorParams);
+    int CalcChordNoteHeads(FunctorParams *functorParams) override;
 
     /**
      * See Object::CalcDots
      */
-    virtual int CalcDots(FunctorParams *functorParams);
+    int CalcDots(FunctorParams *functorParams) override;
 
     /**
      * See Object::CalcLedgerLines
      */
-    virtual int CalcLedgerLines(FunctorParams *functorParams);
+    int CalcLedgerLines(FunctorParams *functorParams) override;
 
     /**
      * See Object::PrepareLayerElementParts
      */
-    virtual int PrepareLayerElementParts(FunctorParams *functorParams);
+    int PrepareLayerElementParts(FunctorParams *functorParams) override;
 
     /**
      * See Object::PrepareLyrics
      */
-    virtual int PrepareLyrics(FunctorParams *functorParams);
-
-    /**
-     * See Object::PreparePointersByLayer
-     */
-    virtual int PreparePointersByLayer(FunctorParams *functorParams);
+    int PrepareLyrics(FunctorParams *functorParams) override;
 
     /**
      * See Object::ResetDrawing
      */
-    virtual int ResetDrawing(FunctorParams *functorParams);
+    int ResetDrawing(FunctorParams *functorParams) override;
 
     /**
      * See Object::ResetHorizontalAlignment
      */
-    virtual int ResetHorizontalAlignment(FunctorParams *functorParams);
+    int ResetHorizontalAlignment(FunctorParams *functorParams) override;
 
     /**
      * See Object::GenerateMIDI
      */
-    virtual int GenerateMIDI(FunctorParams *functorParams);
+    int GenerateMIDI(FunctorParams *functorParams) override;
 
     /**
      * See Object::GenerateTimemap
      */
-    virtual int GenerateTimemap(FunctorParams *functorParams);
+    int GenerateTimemap(FunctorParams *functorParams) override;
+
+    /**
+     * See Object::Transpose
+     */
+    int Transpose(FunctorParams *functorParams) override;
+
+protected:
+    /**
+     * The note locations w.r.t. each staff
+     */
+    MapOfNoteLocs CalcNoteLocations(NotePredicate predicate = NULL) override;
+
+    /**
+     * The dot locations w.r.t. each staff
+     * Since dots for notes on staff lines can be shifted upwards or downwards, there are two choices: primary and
+     * secondary
+     */
+    MapOfDotLocs CalcDotLocations(int layerCount, bool primary) override;
 
 private:
-    //
+    /**
+     * Get the pitch difference in semitones of the accidental (implicit or explicit) for this note.
+     */
+    int GetChromaticAlteration();
+
+    TransPitch GetTransPitch();
+
+    void UpdateFromTransPitch(const TransPitch &tp);
+
+    /**
+     * Return whether dots are overlapping with flag. Take into account flag height, its position as well
+     * as position of the note and position of the dots
+     */
+    bool IsDotOverlappingWithFlag(Doc *doc, const int staffSize, bool isDotShifted);
+
 public:
     //
 private:
@@ -287,14 +380,14 @@ private:
     /**
      * The time in milliseconds since the start of the measure element that contains the note.
      */
-    int m_realTimeOnsetMilliseconds;
+    double m_realTimeOnsetMilliseconds;
 
     /**
      * The time in milliseconds since the start of the measure element to end of printed note.
      * The real-time duration of a tied group is not currently tracked (this gets complicated
      * if there is a tempo change during a note sustain, which is currently not supported).
      */
-    int m_realTimeOffsetMilliseconds;
+    double m_realTimeOffsetMilliseconds;
 
     /**
      * If the note is the first in a tied group, then m_scoreTimeTiedDuration contains the

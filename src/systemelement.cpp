@@ -22,14 +22,22 @@ namespace vrv {
 // SystemElement
 //----------------------------------------------------------------------------
 
-SystemElement::SystemElement() : FloatingObject("se"), AttTyped()
+SystemElement::SystemElement() : FloatingObject(SYSTEM_ELEMENT, "se"), AttTyped()
 {
     RegisterAttClass(ATT_TYPED);
 
     Reset();
 }
 
-SystemElement::SystemElement(std::string classid) : FloatingObject(classid), AttTyped()
+SystemElement::SystemElement(ClassId classId) : FloatingObject(classId, "se"), AttTyped()
+{
+    RegisterAttClass(ATT_TYPED);
+
+    Reset();
+}
+
+SystemElement::SystemElement(ClassId classId, const std::string &classIdStr)
+    : FloatingObject(classId, classIdStr), AttTyped()
 {
     RegisterAttClass(ATT_TYPED);
 
@@ -42,6 +50,8 @@ void SystemElement::Reset()
 {
     FloatingObject::Reset();
     ResetTyped();
+
+    m_visibility = Visible;
 }
 
 //----------------------------------------------------------------------------
@@ -50,17 +60,18 @@ void SystemElement::Reset()
 
 int SystemElement::ConvertToPageBased(FunctorParams *functorParams)
 {
-    ConvertToPageBasedParams *params = dynamic_cast<ConvertToPageBasedParams *>(functorParams);
+    ConvertToPageBasedParams *params = vrv_params_cast<ConvertToPageBasedParams *>(functorParams);
     assert(params);
 
-    this->MoveItselfTo(params->m_pageBasedSystem);
+    assert(params->m_currentSystem);
+    this->MoveItselfTo(params->m_currentSystem);
 
     return FUNCTOR_CONTINUE;
 }
 
 int SystemElement::ConvertToCastOffMensural(FunctorParams *functorParams)
 {
-    ConvertToCastOffMensuralParams *params = dynamic_cast<ConvertToCastOffMensuralParams *>(functorParams);
+    ConvertToCastOffMensuralParams *params = vrv_params_cast<ConvertToCastOffMensuralParams *>(functorParams);
     assert(params);
 
     assert(params->m_targetSystem);
@@ -71,7 +82,7 @@ int SystemElement::ConvertToCastOffMensural(FunctorParams *functorParams)
 
 int SystemElement::CastOffSystems(FunctorParams *functorParams)
 {
-    CastOffSystemsParams *params = dynamic_cast<CastOffSystemsParams *>(functorParams);
+    CastOffSystemsParams *params = vrv_params_cast<CastOffSystemsParams *>(functorParams);
     assert(params);
 
     // Since the functor returns FUNCTOR_SIBLINGS we should never go lower than the system children
@@ -80,14 +91,14 @@ int SystemElement::CastOffSystems(FunctorParams *functorParams)
     // Special case where we use the Relinquish method.
     SystemElement *element = dynamic_cast<SystemElement *>(params->m_contentSystem->Relinquish(this->GetIdx()));
     // move as pending since we want it at the beginning of the system in case of system break coming
-    params->m_pendingObjects.push_back(element);
+    params->m_pendingElements.push_back(element);
 
     return FUNCTOR_SIBLINGS;
 }
 
 int SystemElement::CastOffEncoding(FunctorParams *functorParams)
 {
-    CastOffEncodingParams *params = dynamic_cast<CastOffEncodingParams *>(functorParams);
+    CastOffEncodingParams *params = vrv_params_cast<CastOffEncodingParams *>(functorParams);
     assert(params);
 
     MoveItselfTo(params->m_currentSystem);

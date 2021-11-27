@@ -20,6 +20,7 @@ class Clef;
 class KeySig;
 class Mensur;
 class MeterSig;
+class MeterSigGrp;
 class PgFoot;
 class PgFoot2;
 class PgHead;
@@ -45,28 +46,29 @@ public:
      * @name Constructors, destructors, and other standard methods.
      */
     ///@{
-    ScoreDefElement(std::string classid);
+    ScoreDefElement();
+    ScoreDefElement(ClassId classId);
+    ScoreDefElement(ClassId classId, const std::string &classIdStr);
     virtual ~ScoreDefElement();
-    virtual void Reset();
-    virtual ClassId GetClassId() const { return SCOREDEF_ELEMENT; }
+    void Reset() override;
     ///@}
 
     /**
      * @name Getter to interfaces
      */
     ///@{
-    virtual ScoreDefInterface *GetScoreDefInterface() { return dynamic_cast<ScoreDefInterface *>(this); }
+    ScoreDefInterface *GetScoreDefInterface() override { return dynamic_cast<ScoreDefInterface *>(this); }
     ///@}
 
     /**
-     * @name Methods for checking the presence of clef, key signature, etc. information.
-     * Look both at the attributes (e.g., @key.sig) and at child elements (not implemented)
+     * @name Methods for checking the presence of clef, key signature, etc. information and getting them.
      */
     ///@{
-    bool HasClefInfo() const;
-    bool HasKeySigInfo() const;
-    bool HasMensurInfo() const;
-    bool HasMeterSigInfo() const;
+    bool HasClefInfo(int depth = 1);
+    bool HasKeySigInfo(int depth = 1);
+    bool HasMensurInfo(int depth = 1);
+    bool HasMeterSigInfo(int depth = 1);
+    bool HasMeterSigGrpInfo(int depth = 1);
     ///@}
 
     /**
@@ -78,33 +80,28 @@ public:
      * constructor of each corresponding class (Clef, KeySig, etc.)
      */
     ///@{
-    Clef *GetClefCopy() const;
-    KeySig *GetKeySigCopy() const;
-    Mensur *GetMensurCopy() const;
-    MeterSig *GetMeterSigCopy() const;
+    Clef *GetClef();
+    Clef *GetClefCopy();
+    KeySig *GetKeySig();
+    KeySig *GetKeySigCopy();
+    Mensur *GetMensur();
+    Mensur *GetMensurCopy();
+    MeterSig *GetMeterSig();
+    MeterSig *GetMeterSigCopy();
+    MeterSigGrp *GetMeterSigGrp();
+    MeterSigGrp *GetMeterSigGrpCopy();
     ///@}
+
+    //----------//
+    // Functors //
+    //----------//
 
 private:
-    /**
-     * @name Methods for checking if clef info is available at the attribute level.
-     */
-    ///@{
-    bool HasClefAttrInfo() const;
-    bool HasKeySigAttrInfo() const;
-    bool HasMensurAttrInfo() const;
-    bool HasMeterSigAttrInfo() const;
-    ///@}
-
-    /**
-     * @name Methods for checking if clef info is available at the element level.
-     * To be implemented.
-     */
-    ///@{
-    bool HasClefElementInfo() const;
-    bool HasKeySigElementInfo() const;
-    bool HasMensurElementInfo() const;
-    bool HasMeterSigElementInfo() const;
-    ///@}
+    //
+public:
+    //
+private:
+    //
 };
 
 //----------------------------------------------------------------------------
@@ -115,7 +112,12 @@ private:
  * This class represents a MEI scoreDef.
  * It contains StaffGrp objects.
  */
-class ScoreDef : public ScoreDefElement, public ObjectListInterface, public AttEndings, public AttOptimization {
+class ScoreDef : public ScoreDefElement,
+                 public ObjectListInterface,
+                 public AttDistances,
+                 public AttEndings,
+                 public AttOptimization,
+                 public AttTimeBase {
 public:
     /**
      * @name Constructors, destructors, and other standard methods
@@ -124,12 +126,12 @@ public:
     ///@{
     ScoreDef();
     virtual ~ScoreDef();
-    virtual void Reset();
-    virtual std::string GetClassName() const { return "ScoreDef"; }
-    virtual ClassId GetClassId() const { return SCOREDEF; }
+    Object *Clone() const override { return new ScoreDef(*this); }
+    void Reset() override;
+    std::string GetClassName() const override { return "ScoreDef"; }
     ///@}
 
-    virtual void AddChild(Object *object);
+    bool IsSupportedChild(Object *object) override;
 
     /**
      * Replace the scoreDef with the content of the newScoreDef.
@@ -144,9 +146,20 @@ public:
     void ReplaceDrawingValues(StaffDef *newStaffDef);
 
     /**
+     * Replace the corresponding staffGrp with the labels of the newStaffGrp.
+     * Looks for the staffGrp with the same m_n (@n) and replaces label child
+     */
+    void ReplaceDrawingLabels(StaffGrp *newStaffGrp);
+
+    /**
      * Get the staffDef with number n (NULL if not found).
      */
     StaffDef *GetStaffDef(int n);
+
+    /**
+     * Get the staffGrp with number n (NULL if not found).
+     */
+    StaffGrp *GetStaffGrp(const std::string &n);
 
     /**
      * Return all the @n values of the staffDef in a scoreDef
@@ -156,9 +169,9 @@ public:
     /**
      * Set the redraw flag to all staffDefs.
      * This is necessary at the beginning or when a scoreDef occurs.
-     * Only true flags are applied, unless applyToAll is set to true.
+     * Apply StaffDefRedrawFlags that are defined in functorparams.h
      */
-    void SetRedrawFlags(bool clef, bool keySig, bool mensur, bool meterSig, bool applyToAll);
+    void SetRedrawFlags(int redrawFlags);
 
     /**
      * @name Set and get the scoreDef drawing flags for clef, keysig and mensur.
@@ -176,6 +189,9 @@ public:
     void SetDrawingWidth(int drawingWidth);
     ///@}
 
+    int GetDrawingLabelsWidth() const { return m_drawingLabelsWidth; }
+    void SetDrawingLabelsWidth(int width);
+
     /**
      * @name Getters for running elements
      */
@@ -186,42 +202,72 @@ public:
     PgHead2 *GetPgHead2();
     ///@}
 
+    /**
+     * Return the maximum staff size in the scoreDef (100 if empty)
+     */
+    int GetMaxStaffSize();
+
+    bool IsSectionRestart();
+
     //----------//
     // Functors //
     //----------//
 
     /**
+     * See Object::ResetHorizontalAlignment
+     */
+    int ResetHorizontalAlignment(FunctorParams *functorParams) override;
+
+    /**
      * See Object::ConvertToPageBased
      */
-    virtual int ConvertToPageBased(FunctorParams *functorParams);
+    int ConvertToPageBased(FunctorParams *functorParams) override;
+
+    /**
+     * See Object::ConvertToCastOffMensural
+     */
+    int ConvertToCastOffMensural(FunctorParams *functorParams) override;
 
     /**
      * See Object::CastOffSystems
      */
-    virtual int CastOffSystems(FunctorParams *functorParams);
+    int CastOffSystems(FunctorParams *functorParams) override;
 
     /**
 
      * See Object::CastOffEncoding
      */
-    virtual int CastOffEncoding(FunctorParams *functorParams);
+    int CastOffEncoding(FunctorParams *functorParams) override;
+
+    /**
+     * See Object::AlignMeasures
+     */
+    int AlignMeasures(FunctorParams *functorParams) override;
+
+    /**
+     * See Object::JustifyX
+     */
+    int JustifyX(FunctorParams *functorParams) override;
 
 protected:
     /**
-     * Filter the flat list and keep only StaffGrp elements.
+     * Filter the flat list and keep only StaffDef elements.
      */
-    virtual void FilterList(ListOfObjects *childList);
+    void FilterList(ArrayOfObjects *childList) override;
 
 private:
     //
 public:
     bool m_setAsDrawing;
+    bool m_insertScoreDef;
     //
 private:
     /** Flags for indicating whether labels need to be drawn or not */
     bool m_drawLabels;
     /** Store the drawing width (clef and key sig) of the scoreDef */
     int m_drawingWidth;
+    /** Store the label drawing width of the scoreDef */
+    int m_drawingLabelsWidth;
 };
 
 } // namespace vrv

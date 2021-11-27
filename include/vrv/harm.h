@@ -11,6 +11,7 @@
 #include "controlelement.h"
 #include "textdirinterface.h"
 #include "timeinterface.h"
+#include "transposition.h"
 
 namespace vrv {
 
@@ -37,25 +38,33 @@ public:
     ///@{
     Harm();
     virtual ~Harm();
-    virtual void Reset();
-    virtual std::string GetClassName() const { return "Harm"; }
-    virtual ClassId GetClassId() const { return HARM; }
+    Object *Clone() const override { return new Harm(*this); }
+    void Reset() override;
+    std::string GetClassName() const override { return "Harm"; }
     ///@}
 
     /**
      * @name Getter to interfaces
      */
     ///@{
-    virtual TextDirInterface *GetTextDirInterface() { return dynamic_cast<TextDirInterface *>(this); }
-    virtual TimePointInterface *GetTimePointInterface() { return dynamic_cast<TimePointInterface *>(this); }
-    virtual TimeSpanningInterface *GetTimeSpanningInterface() { return dynamic_cast<TimeSpanningInterface *>(this); }
+    TextDirInterface *GetTextDirInterface() override { return dynamic_cast<TextDirInterface *>(this); }
+    TimePointInterface *GetTimePointInterface() override { return dynamic_cast<TimePointInterface *>(this); }
+    TimeSpanningInterface *GetTimeSpanningInterface() override { return dynamic_cast<TimeSpanningInterface *>(this); }
     ///@}
 
     /**
      * Add an element (text, rend. etc.) to a harm.
      * Only supported elements will be actually added to the child list.
      */
-    virtual void AddChild(Object *object);
+    bool IsSupportedChild(Object *object) override;
+
+    /**
+     * Transposition related. The int tracks where we have iterated through the string.
+     */
+    bool GetRootPitch(TransPitch &pitch, unsigned int &pos);
+    void SetRootPitch(const TransPitch &pitch, unsigned int endPos);
+    bool GetBassPitch(TransPitch &pitch);
+    void SetBassPitch(const TransPitch &pitch);
 
     //----------//
     // Functors //
@@ -64,7 +73,17 @@ public:
     /**
      * See Object::PrepareFloatingGrps
      */
-    virtual int PrepareFloatingGrps(FunctorParams *functoParams);
+    int PrepareFloatingGrps(FunctorParams *functorParams) override;
+
+    /**
+     * See Object::AdjustHarmGrpsSpacing
+     */
+    int AdjustHarmGrpsSpacing(FunctorParams *functorParams) override;
+
+    /**
+     * See Object::Transpose
+     */
+    int Transpose(FunctorParams *functorParams) override;
 
 protected:
     //

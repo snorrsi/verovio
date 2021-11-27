@@ -9,7 +9,10 @@
 #define __VRV_SCORE_H__
 
 #include "atts_shared.h"
-#include "object.h"
+#include "options.h"
+#include "pageboundary.h"
+#include "pageelement.h"
+#include "scoredef.h"
 
 namespace vrv {
 
@@ -22,7 +25,7 @@ namespace vrv {
  * It is used only for loading score-based MEI documents before they are
  * converted to page-based MEI.
  */
-class Score : public Object, public AttLabelled, public AttNNumberLike {
+class Score : public PageElement, public PageElementStartInterface, public AttLabelled, public AttNNumberLike {
 
 public:
     /**
@@ -32,26 +35,104 @@ public:
     ///@{
     Score();
     virtual ~Score();
-    virtual void Reset();
-    virtual std::string GetClassName() const { return "Score"; }
-    virtual ClassId GetClassId() const { return SCORE; }
+    void Reset() override;
+    std::string GetClassName() const override { return "Score"; }
     ///@}
 
     /**
      * @name Methods for adding allowed content
      */
     ///@{
-    virtual void AddChild(Object *object);
+    bool IsSupportedChild(Object *object) override;
     ///@}
+
+    /**
+     * Getter for the score/scoreDef
+     */
+    ScoreDef *GetScoreDef() { return &m_scoreDef; }
+
+    /**
+     * Helper looking at the parent Doc and set its scoreDef as current one.
+     * Called from Object::Process
+     */
+    void SetAsCurrent();
+
+    /**
+     * Calculate the height of the pgHead/pgHead2 and pgFoot/pgFoot2 (if any)
+     * Requires the Doc to have an empty Pages object because it adds temporary pages
+     * Called from Doc::CastOffBase
+     */
+    void CalcRunningElementHeight(Doc *doc);
+
+    /**
+     * Check whether we need to optimize score based on the condense option
+     */
+    bool ScoreDefNeedsOptimization(int optionCondense);
 
     //----------//
     // Functors //
     //----------//
 
+    /**
+     * See Object::AdjustDots
+     */
+    int AdjustDots(FunctorParams *functorParams) override;
+
+    /**
+     * See Object::AdjustLayers
+     */
+    int AdjustLayers(FunctorParams *functorParams) override;
+
+    /**
+     * See Object::AdjustXPos
+     */
+    int AdjustXPos(FunctorParams *functorParams) override;
+
+    /**
+     * See Object::AdjustGraceXPos
+     */
+    int AdjustGraceXPos(FunctorParams *functorParams) override;
+
+    /**
+     * See Object::ConvertToPageBased
+     */
+    ///@{
+    int ConvertToPageBased(FunctorParams *functorParams) override;
+    int ConvertToPageBasedEnd(FunctorParams *functorParams) override;
+    ///@}
+
+    /**
+     * See Object::CastOffPages
+     */
+    int CastOffPages(FunctorParams *functorParams) override;
+
+    /**
+     * See Object::UnCastOff
+     */
+    int UnCastOff(FunctorParams *functorParams) override;
+
+    /**
+     * See Object::ScoreDefOptimize
+     */
+    int ScoreDefOptimize(FunctorParams *functorParams) override;
+
 private:
-    //
+    /**
+     * The score/scoreDef (first child of the score)
+     */
+    ScoreDef m_scoreDef;
+
 public:
-    //
+    /**
+     * @name Height of headers and footers for the score.
+     * Fill by
+     */
+    ///@{
+    int m_drawingPgHeadHeight;
+    int m_drawingPgFootHeight;
+    int m_drawingPgHead2Height;
+    int m_drawingPgFoot2Height;
+    ///@}
 private:
     //
 };

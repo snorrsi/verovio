@@ -264,6 +264,11 @@ class Value {
     type_ = STRING_;
     *( string_value_ = new String() ) = s;
   }
+  void import( const char* s ) {
+    reset();
+    type_ = STRING_;
+    *( string_value_ = new String() ) = s;
+  }
   void import( const Array &a ) {
     reset();
     type_ = ARRAY_;
@@ -523,7 +528,8 @@ inline const Object& Value::get<Object>() const {
 
 template<typename T>
 inline Object &Object::operator<<(const T &value) {
-  return *this << Value(value), *this;
+  *this << Value(value);
+  return *this;
 }
 
 }  // namespace jsonxx

@@ -13,6 +13,7 @@
 #include "keysig.h"
 #include "mensur.h"
 #include "metersig.h"
+#include "metersiggrp.h"
 #include "vrvdef.h"
 
 namespace vrv {
@@ -26,7 +27,7 @@ class Stem;
 
 /**
  * This class is an interface for elements with duration, such as notes and rests.
- * It is not an abstract class but should not be instanciate directly.
+ * It is not an abstract class but should not be instantiate directly.
  */
 class DrawingListInterface {
 public:
@@ -52,7 +53,7 @@ public:
      * Return the drawing list.
      * This is used when actually drawing the list (see View::DrawLayerList)
      */
-    ListOfObjects *GetDrawingList();
+    ArrayOfObjects *GetDrawingList();
 
     /**
      * Reset the drawing list.
@@ -66,7 +67,98 @@ public:
     //
 private:
     /** The list of object for which drawing is postponed */
-    ListOfObjects m_drawingList;
+    ArrayOfObjects m_drawingList;
+};
+
+//----------------------------------------------------------------------------
+// BeamDrawingInterface
+//----------------------------------------------------------------------------
+
+/**
+ * This class is an interface for MEI beam elements (beam, beamSpan).
+ * It stores stem drawing values.
+ * It is also an ObjectListInterface.
+ */
+class BeamDrawingInterface : public ObjectListInterface {
+public:
+    /**
+     * @name Constructors, destructors, and other standard methods
+     */
+    ///@{
+    BeamDrawingInterface();
+    virtual ~BeamDrawingInterface();
+    virtual void Reset();
+    ///@}
+
+    /**
+     * Return information about the position in the beam.
+     * (no const since the cached list is updated)
+     * Object * is a pointer to the object implementing the interface (e.g, Beam, fTrem)
+     */
+    ///@{
+    bool IsFirstIn(Object *object, LayerElement *element);
+    bool IsLastIn(Object *object, LayerElement *element);
+    ///@}
+
+    /**
+     * Initializes the m_beamElementCoords vector objects.
+     * This is called by Beam::FilterList
+     */
+    void InitCoords(ArrayOfObjects *childList, Staff *staff, data_BEAMPLACE place);
+
+    /**
+     * Initialize m_cueSize value based on the @cue attribute and presence of child elements with @cue/@grace
+     * attributes
+     */
+    void InitCue(bool beamCue);
+
+    bool IsHorizontal();
+
+    bool IsRepeatedPattern();
+
+    /**
+     * Checks whether difference between highest and lowest notes of the beam is just one step
+     */
+    bool HasOneStepHeight();
+
+    /**
+     * Clear the m_beamElementCoords vector and delete all the objects.
+     */
+    void ClearCoords();
+
+protected:
+    /**
+     * Return the position of the element in the beam.
+     * For notes, lookup the position of the parent chord.
+     */
+    int GetPosition(Object *object, LayerElement *element);
+
+public:
+    // values to be set before calling CalcBeam
+    bool m_changingDur;
+    bool m_beamHasChord;
+    bool m_hasMultipleStemDir;
+    bool m_cueSize;
+    Staff *m_crossStaffContent;
+    data_STAFFREL_basic m_crossStaffRel;
+    int m_shortestDur;
+    data_STEMDIRECTION m_notesStemDir;
+    data_BEAMPLACE m_drawingPlace;
+    Staff *m_beamStaff;
+
+    // values set by CalcBeam
+    int m_beamWidth;
+    int m_beamWidthBlack;
+    int m_beamWidthWhite;
+
+    // position x for the stem (normal and cue-sized)
+    int m_stemXAbove[2];
+    int m_stemXBelow[2];
+
+    /**
+     * An array of coordinates for each element
+     **/
+    ArrayOfBeamElementCoords m_beamElementCoords;
 };
 
 //----------------------------------------------------------------------------
@@ -77,7 +169,7 @@ private:
  * This class is an interface for MEI scoreDef or staffDef attributes clef, keysig and mensur.
  * It can either hold element or attribute values. Element values are hold in normal objects
  * (e.g., Clef) and attribute values are hold in dedicated Object classes (e.g., ClefAttr)
- * During rendering, only Element object are used. They are obained by the GetXXXCopy methods
+ * During rendering, only Element object are used. They are obtained by the GetXXXCopy methods
  * that create a copy of the Element object or a corresponding Element object if a attribute value
  * object is hold.
  */
@@ -98,30 +190,28 @@ public:
      * This will be true only for the first layer in the staff.
      */
     ///@{
-    bool DrawClef() const { return (m_drawClef && m_currentClef.HasShape()); }
+    bool DrawClef() { return (m_drawClef && m_currentClef.HasShape()); }
     void SetDrawClef(bool drawClef) { m_drawClef = drawClef; }
-    bool DrawKeySig() const
-    {
-        return (m_drawKeySig && (m_currentKeySig.GetAlterationType() != ACCIDENTAL_WRITTEN_NONE));
-    }
+    bool DrawKeySig() { return (m_drawKeySig); }
     void SetDrawKeySig(bool drawKeySig) { m_drawKeySig = drawKeySig; }
-    bool DrawMensur() const { return (m_drawMensur && m_currentMensur.HasSign()); }
+    bool DrawMensur() { return (m_drawMensur && m_currentMensur.HasSign()); }
     void SetDrawMensur(bool drawMensur) { m_drawMensur = drawMensur; }
-    bool DrawMeterSig() const
-    {
-        return (m_drawMeterSig && (m_currentMeterSig.HasUnit() || m_currentMeterSig.HasSym()));
-    }
+    bool DrawMeterSig() { return (m_drawMeterSig && (m_currentMeterSig.HasUnit() || m_currentMeterSig.HasSym())); }
     void SetDrawMeterSig(bool drawMeterSig) { m_drawMeterSig = drawMeterSig; }
+    bool DrawMeterSigGrp();
+    void SetDrawMeterSigGrp(bool drawMeterSigGrp) { m_drawMeterSigGrp = drawMeterSigGrp; }
     ///@}
 
     /**
      * @name Set the current clef, keySig, mensur and meterSig.
      */
     ///@{
-    void SetCurrentClef(Clef *clef);
-    void SetCurrentKeySig(KeySig *keySig);
-    void SetCurrentMensur(Mensur *mensur);
-    void SetCurrentMeterSig(MeterSig *meterSig);
+    void SetCurrentClef(Clef const *clef);
+    void SetCurrentKeySig(KeySig const *keySig);
+    void SetCurrentMensur(Mensur const *mensur);
+    void SetCurrentMeterSig(MeterSig const *meterSig);
+    void SetCurrentMeterSigGrp(MeterSigGrp const *meterSig);
+    void AlternateCurrentMeterSig(Measure *measure);
     ///@}
 
     /**
@@ -133,6 +223,7 @@ public:
     KeySig *GetCurrentKeySig() { return &m_currentKeySig; }
     Mensur *GetCurrentMensur() { return &m_currentMensur; }
     MeterSig *GetCurrentMeterSig() { return &m_currentMeterSig; }
+    MeterSigGrp *GetCurrentMeterSigGrp() { return &m_currentMeterSigGrp; }
     ///@}
 
 private:
@@ -144,6 +235,8 @@ private:
     Mensur m_currentMensur;
     /** The meter signature (time signature) */
     MeterSig m_currentMeterSig;
+    /** The meter signature group */
+    MeterSigGrp m_currentMeterSigGrp;
 
     /**
      *  @name Flags for indicating whether the clef, keysig and mensur needs to be drawn or not
@@ -153,6 +246,7 @@ private:
     bool m_drawKeySig;
     bool m_drawMensur;
     bool m_drawMeterSig;
+    bool m_drawMeterSigGrp;
     ///@}
 };
 
@@ -198,6 +292,7 @@ public:
     ///@{
     virtual Point GetStemUpSE(Doc *doc, int staffSize, bool graceSize) = 0;
     virtual Point GetStemDownNW(Doc *doc, int staffSize, bool graceSize) = 0;
+    virtual int CalcStemLenInThirdUnits(Staff *staff, data_STEMDIRECTION stemDir) = 0;
     ///@}
 
 protected:

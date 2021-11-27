@@ -21,7 +21,9 @@ namespace vrv {
 // Lem
 //----------------------------------------------------------------------------
 
-Lem::Lem() : EditorialElement("lem-"), AttSource()
+static const ClassRegistrar<Lem> s_factory("lem", LEM);
+
+Lem::Lem() : EditorialElement(LEM, "lem-"), AttSource()
 {
     RegisterAttClass(ATT_SOURCE);
 

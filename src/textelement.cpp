@@ -19,7 +19,7 @@ namespace vrv {
 // TextElement
 //----------------------------------------------------------------------------
 
-TextElement::TextElement() : Object("te-"), AttLabelled(), AttTyped()
+TextElement::TextElement() : Object(TEXT_ELEMENT, "te-"), AttLabelled(), AttTyped()
 {
     RegisterAttClass(ATT_LABELLED);
     RegisterAttClass(ATT_TYPED);
@@ -27,7 +27,16 @@ TextElement::TextElement() : Object("te-"), AttLabelled(), AttTyped()
     Reset();
 }
 
-TextElement::TextElement(std::string classid) : Object(classid), AttLabelled(), AttTyped()
+TextElement::TextElement(ClassId classId) : Object(classId, "te-"), AttLabelled(), AttTyped()
+{
+    RegisterAttClass(ATT_LABELLED);
+    RegisterAttClass(ATT_TYPED);
+
+    Reset();
+}
+
+TextElement::TextElement(ClassId classId, const std::string &classIdStr)
+    : Object(classId, classIdStr), AttLabelled(), AttTyped()
 {
     RegisterAttClass(ATT_LABELLED);
     RegisterAttClass(ATT_TYPED);
@@ -52,13 +61,13 @@ int TextElement::GetDrawingX() const
     // No cache for text elements
 
     // First get the first layerElement parent (if any) and use its position if they share the same alignment
-    Object *textElement = this->GetFirstParentInRange(TEXT_ELEMENT, TEXT_ELEMENT_max);
+    Object *textElement = this->GetFirstAncestorInRange(TEXT_ELEMENT, TEXT_ELEMENT_max);
     if (textElement) {
         return (textElement->GetDrawingX() + this->GetDrawingXRel());
     }
 
     // Otherwise get the running element parent - no cast to RunningElement is necessary
-    Object *runningElement = this->GetFirstParentInRange(RUNNING_ELEMENT, RUNNING_ELEMENT_max);
+    Object *runningElement = this->GetFirstAncestorInRange(RUNNING_ELEMENT, RUNNING_ELEMENT_max);
     if (runningElement) {
         return (runningElement->GetDrawingX() + this->GetDrawingXRel());
     }
@@ -71,13 +80,13 @@ int TextElement::GetDrawingY() const
     // No cache for text elements
 
     // First get the first layerElement parent (if any) and use its position if they share the same alignment
-    Object *textElement = this->GetFirstParentInRange(TEXT_ELEMENT, TEXT_ELEMENT_max);
+    Object *textElement = this->GetFirstAncestorInRange(TEXT_ELEMENT, TEXT_ELEMENT_max);
     if (textElement) {
         return (textElement->GetDrawingY() + this->GetDrawingYRel());
     }
 
     // Otherwise get the running element parent - no cast to RunningElement is necessary
-    Object *runningElement = this->GetFirstParentInRange(RUNNING_ELEMENT, RUNNING_ELEMENT_max);
+    Object *runningElement = this->GetFirstAncestorInRange(RUNNING_ELEMENT, RUNNING_ELEMENT_max);
     if (runningElement) {
         return (runningElement->GetDrawingY() + this->GetDrawingYRel());
     }

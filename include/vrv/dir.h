@@ -27,8 +27,9 @@ class Dir : public ControlElement,
             public TextListInterface,
             public TextDirInterface,
             public TimeSpanningInterface,
-            public AttLang,
             public AttExtender,
+            public AttLang,
+            public AttLineRendBase,
             public AttVerticalGroup {
 public:
     /**
@@ -38,25 +39,35 @@ public:
     ///@{
     Dir();
     virtual ~Dir();
-    virtual void Reset();
-    virtual std::string GetClassName() const { return "Dir"; }
-    virtual ClassId GetClassId() const { return DIR; }
+    Object *Clone() const override { return new Dir(*this); }
+    void Reset() override;
+    std::string GetClassName() const override { return "Dir"; }
     ///@}
 
     /**
      * @name Getter to interfaces
      */
     ///@{
-    virtual TextDirInterface *GetTextDirInterface() { return dynamic_cast<TextDirInterface *>(this); }
-    virtual TimePointInterface *GetTimePointInterface() { return dynamic_cast<TimePointInterface *>(this); }
-    virtual TimeSpanningInterface *GetTimeSpanningInterface() { return dynamic_cast<TimeSpanningInterface *>(this); }
+    TextDirInterface *GetTextDirInterface() override { return dynamic_cast<TextDirInterface *>(this); }
+    TimePointInterface *GetTimePointInterface() override { return dynamic_cast<TimePointInterface *>(this); }
+    TimeSpanningInterface *GetTimeSpanningInterface() override { return dynamic_cast<TimeSpanningInterface *>(this); }
     ///@}
 
     /**
-     * Add an element (text, rend. etc.) to a dynam.
+     * Add an element (text, rend. etc.) to a dir.
      * Only supported elements will be actually added to the child list.
      */
-    virtual void AddChild(Object *object);
+    bool IsSupportedChild(Object *object) override;
+
+    /**
+     * See FloatingObject::IsExtenderElement
+     */
+    bool IsExtenderElement() const override { return GetExtender() == BOOLEAN_true; }
+
+    /**
+     * Check whether one of the children has hAlign attribute set to `alignment` value
+     */
+    bool AreChildrenAlignedTo(data_HORIZONTALALIGNMENT alignment) const;
 
     //----------//
     // Functors //
@@ -65,7 +76,7 @@ public:
     /**
      * See Object::PrepareFloatingGrps
      */
-    virtual int PrepareFloatingGrps(FunctorParams *);
+    int PrepareFloatingGrps(FunctorParams *functorParams) override;
 
 protected:
     //

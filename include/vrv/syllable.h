@@ -32,20 +32,25 @@ public:
     Syllable();
     void Init();
     virtual ~Syllable();
-    virtual void Reset();
-    virtual std::string GetClassName() const { return "Syllable"; }
-    virtual ClassId GetClassId() const { return SYLLABLE; }
-    virtual Object *Clone() const { return new Syllable(*this); }
+    Object *Clone() const override { return new Syllable(*this); }
+    void Reset() override;
+    std::string GetClassName() const override { return "Syllable"; }
     ///@}
 
     /**
      * Add an element (a note or a rest) to a syllable.
      * Only syl or neume will be added.
      */
-    virtual void AddChild(Object *object);
+    bool IsSupportedChild(Object *object) override;
 
     /** Override the method since alignment is required */
-    virtual bool HasToBeAligned() const { return true; }
+    bool HasToBeAligned() const override { return true; }
+
+    /**
+     * Add a default syl to this syllable if one does not exist.
+     * Returns true if a syl was added, false otherwise.
+     */
+    bool MarkupAddSyl();
 
 private:
     //

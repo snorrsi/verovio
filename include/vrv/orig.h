@@ -12,7 +12,7 @@
 #include "editorial.h"
 
 namespace vrv {
-    
+
 //----------------------------------------------------------------------------
 // Orig
 //----------------------------------------------------------------------------
@@ -26,9 +26,9 @@ public:
     ///@{
     Orig();
     virtual ~Orig();
-    virtual void Reset();
-    virtual std::string GetClassName() const { return "Orig"; }
-    virtual ClassId GetClassId() const { return ORIG; }
+    Object *Clone() const override { return new Orig(*this); }
+    void Reset() override;
+    std::string GetClassName() const override { return "Orig"; }
     ///@}
 
 private:

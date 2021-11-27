@@ -15,51 +15,7 @@
 
 namespace vrv {
 
-//----------------------------------------------------------------------------
-// Bracket
-//----------------------------------------------------------------------------
-
-/**
- * This class models a bracket as a layer element part and has not direct MEI equivlatent.
- * It is used to represent tuplet brackets.
- */
-class Bracket : public LayerElement {
-public:
-    /**
-     * @name Constructors, destructors, reset and class name methods
-     * Reset method resets all attribute classes
-     */
-    ///@{
-    Bracket();
-    virtual ~Bracket();
-    virtual void Reset();
-    virtual std::string GetClassName() const { return "Bracket"; }
-    virtual ClassId GetClassId() const { return BRACKET; }
-    ///@}
-
-    //----------//
-    // Functors //
-    //----------//
-
-    /**
-     * Overwritten version of Save that avoids anything to be written
-     */
-    ///@{
-    virtual int Save(FunctorParams *) { return FUNCTOR_CONTINUE; }
-    virtual int SaveEnd(FunctorParams *) { return FUNCTOR_CONTINUE; }
-    ///@}
-
-    /**
-     * See Object::ResetDrawing
-     */
-    virtual int ResetDrawing(FunctorParams *functorParams);
-
-private:
-    //
-public:
-    //
-private:
-};
+class TupletNum;
 
 //----------------------------------------------------------------------------
 // Dots
@@ -77,44 +33,51 @@ public:
     ///@{
     Dots();
     virtual ~Dots();
-    virtual void Reset();
-    virtual std::string GetClassName() const { return "Dots"; }
-    virtual ClassId GetClassId() const { return DOTS; }
+    void Reset() override;
+    std::string GetClassName() const override { return "Dots"; }
     ///@}
 
     /** Override the method since alignment is required */
-    virtual bool HasToBeAligned() const { return true; }
+    bool HasToBeAligned() const override { return true; }
 
-    std::list<int> *GetDotLocsForStaff(Staff *staff);
+    std::set<int> GetDotLocsForStaff(Staff *staff) const;
+    std::set<int> &ModifyDotLocsForStaff(Staff *staff);
 
-    const MapOfDotLocs *GetMapOfDotLocs() const { return &m_dotLocsByStaff; }
+    const MapOfDotLocs &GetMapOfDotLocs() const { return m_dotLocsByStaff; }
+    void SetMapOfDotLocs(const MapOfDotLocs &dotLocs) { m_dotLocsByStaff = dotLocs; };
+
+    void IsAdjusted(bool isAdjusted) { m_isAdjusted = isAdjusted; }
+    bool IsAdjusted() const { return m_isAdjusted; }
 
     //----------//
     // Functors //
     //----------//
 
     /**
-     * See Object::CalcStem
-     */
-    // virtual int CalcStem(FunctorParams *functorParams);
-
-    /**
      * Overwritten version of Save that avoids anything to be written
      */
     ///@{
-    virtual int Save(FunctorParams *) { return FUNCTOR_CONTINUE; }
-    virtual int SaveEnd(FunctorParams *) { return FUNCTOR_CONTINUE; }
+    int Save(FunctorParams *functorParams) override { return FUNCTOR_CONTINUE; }
+    int SaveEnd(FunctorParams *functorParams) override { return FUNCTOR_CONTINUE; }
+    ///@}
+
+    /**
+     * Set/get methods for the flagShift
+     */
+    ///@{
+    int GetFlagShift() const { return m_flagShift; }
+    void SetFlagShift(int shiftVal) { m_flagShift = shiftVal; }
     ///@}
 
     /**
      * See Object::ResetDrawing
      */
-    virtual int ResetDrawing(FunctorParams *functorParams);
+    int ResetDrawing(FunctorParams *functorParams) override;
 
     /**
      * See Object::ResetHorizontalAlignment
      */
-    virtual int ResetHorizontalAlignment(FunctorParams *functorParams);
+    int ResetHorizontalAlignment(FunctorParams *functorParams) override;
 
 private:
     //
@@ -125,6 +88,9 @@ private:
      * A map of dot locations
      */
     MapOfDotLocs m_dotLocsByStaff;
+
+    bool m_isAdjusted;
+    int m_flagShift;
 };
 
 //----------------------------------------------------------------------------
@@ -143,18 +109,17 @@ public:
     ///@{
     Flag();
     virtual ~Flag();
-    virtual void Reset();
-    virtual std::string GetClassName() const { return "Flag"; }
-    virtual ClassId GetClassId() const { return FLAG; }
+    void Reset() override;
+    std::string GetClassName() const override { return "Flag"; }
     ///@}
 
     /** Override the method since alignment is required */
-    virtual bool HasToBeAligned() const { return true; }
+    bool HasToBeAligned() const override { return true; }
 
-    wchar_t GetSmuflCode(data_STEMDIRECTION stemDir);
+    wchar_t GetFlagGlyph(data_STEMDIRECTION stemDir) const;
 
-    Point GetStemUpSE(Doc *doc, int staffSize, bool graceSize, wchar_t &code);
-    Point GetStemDownNW(Doc *doc, int staffSize, bool graceSize, wchar_t &code);
+    Point GetStemUpSE(Doc *doc, int staffSize, bool graceSize, wchar_t &code) const;
+    Point GetStemDownNW(Doc *doc, int staffSize, bool graceSize, wchar_t &code) const;
 
     //----------//
     // Functors //
@@ -164,14 +129,14 @@ public:
      * Overwritten version of Save that avoids anything to be written
      */
     ///@{
-    virtual int Save(FunctorParams *) { return FUNCTOR_CONTINUE; }
-    virtual int SaveEnd(FunctorParams *) { return FUNCTOR_CONTINUE; }
+    int Save(FunctorParams *functorParams) override { return FUNCTOR_CONTINUE; }
+    int SaveEnd(FunctorParams *functorParams) override { return FUNCTOR_CONTINUE; }
     ///@}
 
     /**
      * See Object::ResetDrawing
      */
-    virtual int ResetDrawing(FunctorParams *functorParams);
+    int ResetDrawing(FunctorParams *functorParams) override;
 
 private:
     //
@@ -183,25 +148,55 @@ private:
 };
 
 //----------------------------------------------------------------------------
-// TupletNum
+// TupletBracket
 //----------------------------------------------------------------------------
 
 /**
- * This class models a tuplet num as a layer element part and has not direct MEI equivlatent.
- * It is used to represent tuplet number
+ * This class models a bracket as a layer element part and has not direct MEI equivlatent.
+ * It is used to represent tuplet brackets.
  */
-class TupletNum : public LayerElement, public AttTupletVis {
+class TupletBracket : public LayerElement, public AttTupletVis {
 public:
     /**
      * @name Constructors, destructors, reset and class name methods
      * Reset method resets all attribute classes
      */
     ///@{
-    TupletNum();
-    virtual ~TupletNum();
-    virtual void Reset();
-    virtual std::string GetClassName() const { return "TupletNum"; }
-    virtual ClassId GetClassId() const { return TUPLET_NUM; }
+    TupletBracket();
+    virtual ~TupletBracket();
+    void Reset() override;
+    std::string GetClassName() const override { return "TupletBracket"; }
+    ///@}
+
+    /**
+     * @name Setter and getter for darwing rel positions
+     */
+    ///@{
+    int GetDrawingXRelLeft() { return m_drawingXRelLeft; }
+    void SetDrawingXRelLeft(int drawingXRelLeft) { m_drawingXRelLeft = drawingXRelLeft; }
+    int GetDrawingXRelRight() { return m_drawingXRelRight; }
+    void SetDrawingXRelRight(int drawingXRelRight) { m_drawingXRelRight = drawingXRelRight; }
+    ///@}
+
+    /**
+     * @name Setter and getter for darwing positions.
+     * Takes into account:
+     * - the position of the first and last element.
+     * - the position of the beam if aligned with a beam.
+     */
+    ///@{
+    int GetDrawingXLeft();
+    int GetDrawingXRight();
+    int GetDrawingYLeft();
+    int GetDrawingYRight();
+    ///@}
+
+    /**
+     * @name Setter and getter for the aligned num
+     */
+    ///@{
+    TupletNum *GetAlignedNum() { return m_alignedNum; }
+    void SetAlignedNum(TupletNum *alignedNum) { m_alignedNum = alignedNum; }
     ///@}
 
     //----------//
@@ -212,20 +207,109 @@ public:
      * Overwritten version of Save that avoids anything to be written
      */
     ///@{
-    virtual int Save(FunctorParams *) { return FUNCTOR_CONTINUE; }
-    virtual int SaveEnd(FunctorParams *) { return FUNCTOR_CONTINUE; }
+    int Save(FunctorParams *functorParams) override { return FUNCTOR_CONTINUE; }
+    int SaveEnd(FunctorParams *functorParams) override { return FUNCTOR_CONTINUE; }
     ///@}
 
     /**
-     * See Object::ResetDrawing
+     * See Object::ResetHorizontalAlignment
      */
-    virtual int ResetDrawing(FunctorParams *functorParams);
+    int ResetHorizontalAlignment(FunctorParams *functorParams) override;
+
+    /**
+     * See Object::ResetVerticalAlignment
+     */
+    int ResetVerticalAlignment(FunctorParams *functorParams) override;
 
 private:
     //
 public:
     //
 private:
+    /**
+     * The XRel shift from the left X position.
+     * The left X position is the one of the first Chord / Note / Rest in the tuplet
+     */
+    int m_drawingXRelLeft;
+    /**
+     * The XRel shift from the right X position.
+     * The right X position is the one of the last Chord / Note / Rest in the tuplet
+     */
+    int m_drawingXRelRight;
+    /** A pointer to the num with which the TupletBracket is aligned (if any) */
+    TupletNum *m_alignedNum;
+};
+
+//----------------------------------------------------------------------------
+// TupletNum
+//----------------------------------------------------------------------------
+
+/**
+ * This class models a tuplet num as a layer element part and has not direct MEI equivlatent.
+ * It is used to represent tuplet number
+ */
+class TupletNum : public LayerElement, public AttNumberPlacement, public AttTupletVis {
+public:
+    /**
+     * @name Constructors, destructors, reset and class name methods
+     * Reset method resets all attribute classes
+     */
+    ///@{
+    TupletNum();
+    virtual ~TupletNum();
+    void Reset() override;
+    std::string GetClassName() const override { return "TupletNum"; }
+    ///@}
+
+    /**
+     * @name Setter and getter for darwing positions.
+     * Takes into account:
+     * - the position of the first and last element.
+     * - the position of the bracket if aligned with a bracket.
+     * - the position of the beam if aligned with a beam.
+     */
+    ///@{
+    int GetDrawingYMid();
+    int GetDrawingXMid(Doc *doc = NULL);
+    ///@}
+
+    /**
+     * @name Setter and getter for the aligned bracket
+     */
+    ///@{
+    TupletBracket *GetAlignedBracket() { return m_alignedBracket; }
+    void SetAlignedBracket(TupletBracket *alignedBracket);
+    ///@}
+
+    //----------//
+    // Functors //
+    //----------//
+
+    /**
+     * Overwritten version of Save that avoids anything to be written
+     */
+    ///@{
+    int Save(FunctorParams *functorParams) override { return FUNCTOR_CONTINUE; }
+    int SaveEnd(FunctorParams *functorParams) override { return FUNCTOR_CONTINUE; }
+    ///@}
+
+    /**
+     * See Object::ResetHorizontalAlignment
+     */
+    int ResetHorizontalAlignment(FunctorParams *functorParams) override;
+
+    /**
+     * See Object::ResetVerticalAlignment
+     */
+    int ResetVerticalAlignment(FunctorParams *functorParams) override;
+
+private:
+    //
+public:
+    //
+private:
+    /** A pointer to the bracket with which the TupletNum is aligned (if any) */
+    TupletBracket *m_alignedBracket;
 };
 
 //----------------------------------------------------------------------------
@@ -244,18 +328,17 @@ public:
     ///@{
     Stem();
     virtual ~Stem();
-    virtual void Reset();
-    virtual std::string GetClassName() const { return "Stem"; }
-    virtual ClassId GetClassId() const { return STEM; }
+    void Reset() override;
+    std::string GetClassName() const override { return "Stem"; }
     ///@}
 
     /** Override the method since alignment is required */
-    virtual bool HasToBeAligned() const { return true; }
+    bool HasToBeAligned() const override { return true; }
 
     /**
      * Add an element (only flag supported) to a stem.
      */
-    virtual void AddChild(Object *object);
+    bool IsSupportedChild(Object *object) override;
 
     /**
      * @name Setter and getter for darwing stem direction and length
@@ -267,6 +350,19 @@ public:
     void SetDrawingStemLen(int drawingStemLen) { m_drawingStemLen = drawingStemLen; }
     ///@}
 
+    /**
+     * @name Setter and getter of the virtual flag
+     */
+    ///@{
+    bool IsVirtual() const { return m_isVirtual; }
+    void IsVirtual(bool isVirtual) { m_isVirtual = isVirtual; }
+    ///@}
+
+    /**
+     * Helper to adjust overlaping layers for stems
+     */
+    int CompareToElementPosition(Doc *doc, LayerElement *otherElement, int margin);
+
     //----------//
     // Functors //
     //----------//
@@ -274,34 +370,44 @@ public:
     /**
      * See Object::CalcStem
      */
-    virtual int CalcStem(FunctorParams *functorParams);
+    int CalcStem(FunctorParams *functorParams) override;
 
     /**
      * Overwritten version of Save that avoids anything to be written
      */
     ///@{
-    virtual int Save(FunctorParams *) { return FUNCTOR_CONTINUE; }
-    virtual int SaveEnd(FunctorParams *) { return FUNCTOR_CONTINUE; }
+    int Save(FunctorParams *functorParams) override { return FUNCTOR_CONTINUE; }
+    int SaveEnd(FunctorParams *functorParams) override { return FUNCTOR_CONTINUE; }
     ///@}
 
     /**
      * See Object::ResetDrawing
      */
-    virtual int ResetDrawing(FunctorParams *functorParams);
+    int ResetDrawing(FunctorParams *functorParams) override;
 
 private:
-    //
+    /**
+     * Addjusts flag placement and stem length if they are crossing notehead or ledger lines
+     */
+    void AdjustFlagPlacement(Doc *doc, Flag *flag, int staffSize, int verticalCenter, int duration);
+
 public:
     //
 private:
     /**
-     *
+     * The drawing direction of the stem
      */
     data_STEMDIRECTION m_drawingStemDir;
     /**
-     *
+     * The drawing length of stem
      */
     int m_drawingStemLen;
+    /**
+     * A flag indicating if a stem if virtual and should never be rendered.
+     * Virtual stems are added to whole notes (and longer) for position calculation and
+     * for supporting MEI @stem.mod
+     */
+    bool m_isVirtual;
 };
 
 } // namespace vrv

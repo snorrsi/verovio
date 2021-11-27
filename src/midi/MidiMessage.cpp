@@ -2,7 +2,7 @@
 // Programmer:    Craig Stuart Sapp <craig@ccrma.stanford.edu>
 // Creation Date: Sat Feb 14 20:49:21 PST 2015
 // Last Modified: Sun Apr 15 11:11:05 PDT 2018 Added event removal system.
-// Filename:      midifile/src-library/MidiMessage.cpp
+// Filename:      midifile/src/MidiMessage.cpp
 // Website:       http://midifile.sapp.org
 // Syntax:        C++11
 // vim:           ts=3 noexpandtab
@@ -89,7 +89,7 @@ MidiMessage& MidiMessage::operator=(const MidiMessage& message) {
 	if (this == &message) {
 		return *this;
 	}
-	(*this) = message;
+	std::vector<uchar>::operator=(static_cast<const std::vector<uchar> &>(message));
 	return *this;
 }
 
@@ -389,6 +389,120 @@ bool MidiMessage::isController(void) const {
 		return false;
 	} else {
 		return true;
+	}
+}
+
+
+
+//////////////////////////////
+//
+// MidiMessage::isSustain -- Returns true if the MidiMessages is a sustain pedal
+//    control event.  Controller 64 is the sustain pedal for general MIDI.
+//
+
+bool MidiMessage::isSustain(void) const {
+	if (!isController()) {
+		return false;
+	}
+	if (getP1() == 64) {
+		return true;
+	} else {
+		return false;
+	}
+}
+
+
+
+//////////////////////////////
+//
+// MidiMessage::isSustainOn -- Returns true if a sustain-pedal-on control message.
+//     Sustain-on is a value in the range from 64-127 for controller 64.
+//
+
+bool MidiMessage::isSustainOn(void) const {
+	if (!isSustain()) {
+		return false;
+	}
+	if (getP2() >= 64) {
+		return true;
+	} else {
+		return false;
+	}
+}
+
+
+
+//////////////////////////////
+//
+// MidiMessage::isSustainOff -- Returns true if a sustain-pedal-off control message.
+//     Sustain-off is a value in the range from 0-63 for controller 64.
+//
+
+bool MidiMessage::isSustainOff(void) const {
+	if (!isSustain()) {
+		return false;
+	}
+	if (getP2() < 64) {
+		return true;
+	} else {
+		return false;
+	}
+}
+
+
+
+//////////////////////////////
+//
+// MidiMessage::isSoft -- Returns true if the MidiMessages is a soft pedal
+//    control event.  Controller 67 is the sustain pedal for general MIDI.
+//
+
+bool MidiMessage::isSoft(void) const {
+	if (!isController()) {
+		return false;
+	}
+	if (getP1() == 67) {
+		return true;
+	} else {
+		return false;
+	}
+}
+
+
+
+//////////////////////////////
+//
+// MidiMessage::isSoftOn -- Returns true if a sustain-pedal-on control message.
+//     Soft-on is a value in the range from 64-127 for controller 67.
+//
+
+bool MidiMessage::isSoftOn(void) const {
+	if (!isSoft()) {
+		return false;
+	}
+	if (getP2() >= 64) {
+		return true;
+	} else {
+		return false;
+	}
+}
+
+
+
+//////////////////////////////
+//
+// MidiMessage::isSoftOff -- Returns true if a sustain-pedal-off control message.
+//     Soft-off is a value in the range from 0-63 for controller 67.
+//
+
+bool MidiMessage::isSoftOff(void) const {
+	if (!isSoft()) {
+		return false;
+	}
+	if (getP2() < 64) {
+		return true;
+	} else {
+		return false;
 	}
 }
 
@@ -820,7 +934,7 @@ void MidiMessage::setP0(int value) {
 	if (getSize() < 1) {
 		resize(1);
 	}
-	(*this)[0] = value;
+	(*this)[0] = static_cast<uchar>(value);
 }
 
 
@@ -838,7 +952,7 @@ void MidiMessage::setP1(int value) {
 	if (getSize() < 2) {
 		resize(2);
 	}
-	(*this)[1] = value;
+	(*this)[1] = static_cast<uchar>(value);
 }
 
 
@@ -857,7 +971,7 @@ void MidiMessage::setP2(int value) {
 	if (getSize() < 3) {
 		resize(3);
 	}
-	(*this)[2] = value;
+	(*this)[2] = static_cast<uchar>(value);
 }
 
 
@@ -876,7 +990,7 @@ void MidiMessage::setP3(int value) {
 	if (getSize() < 4) {
 		resize(4);
 	}
-	(*this)[3] = value;
+	(*this)[3] = static_cast<uchar>(value);
 }
 
 
@@ -1227,7 +1341,7 @@ void MidiMessage::setSpelling(int base7, int accidental) {
 
 	}
 
-	uchar vel = getVelocity();
+	uchar vel = static_cast<uchar>(getVelocity());
 	// suppress any previous content in the first two bits:
 	vel = vel & 0xFC;
 	// insert the spelling code:

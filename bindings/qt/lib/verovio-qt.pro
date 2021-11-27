@@ -1,7 +1,7 @@
 QT -= gui
 QT += quick
 
-CONFIG += c++14
+CONFIG += c++17
 
 TARGET = verovio-qt
 TEMPLATE = lib
@@ -36,8 +36,19 @@ INCLUDEPATH += include
     INCLUDEPATH += ../../../include/vrv
     INCLUDEPATH += ../../../include/pugi
     INCLUDEPATH += ../../../include/utf8
+    INCLUDEPATH += ../../../include/json
     INCLUDEPATH += ../../../libmei
-    LIBS += -L../../../tools -lverovio
+}
+
+android {
+    message("* Using settings for Android.")
+
+    LIBS += -L../../android/libs/armeabi-v7a -lverovio-android
+}
+else {
+    message("* Using settings for Other (Linux, Mac, Windows, ...).")
+
+    LIBS += -L../../../tools/build-library -lverovio
 }
 
 unix {

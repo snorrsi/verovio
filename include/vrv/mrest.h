@@ -14,6 +14,9 @@
 
 namespace vrv {
 
+class Layer;
+class Staff;
+
 //----------------------------------------------------------------------------
 // MRest
 //----------------------------------------------------------------------------
@@ -23,6 +26,7 @@ namespace vrv {
  */
 class MRest : public LayerElement,
               public PositionInterface,
+              public AttColor,
               public AttCue,
               public AttFermataPresent,
               public AttVisibility {
@@ -34,36 +38,41 @@ public:
     ///@{
     MRest();
     virtual ~MRest();
-    virtual void Reset();
-    virtual std::string GetClassName() const { return "MRest"; }
-    virtual ClassId GetClassId() const { return MREST; }
+    Object *Clone() const override { return new MRest(*this); }
+    void Reset() override;
+    std::string GetClassName() const override { return "MRest"; }
     ///@}
 
     /**
      * @name Getter to interfaces
      */
     ///@{
-    virtual PositionInterface *GetPositionInterface() { return dynamic_cast<PositionInterface *>(this); }
+    PositionInterface *GetPositionInterface() override { return dynamic_cast<PositionInterface *>(this); }
     ///@}
+
+    /**
+     * Get the vertical location for mRest considering other layer elements
+     */
+    int GetOptimalLayerLocation(Staff *staff, Layer *layer, int defaultLocation);
 
     //----------//
     // Functors //
     //----------//
 
     /**
-     * See Object::ConvertAnalyticalMarkup
+     * See Object::ConvertMarkupAnalytical
      */
-    virtual int ConvertAnalyticalMarkup(FunctorParams *functorParams);
+    int ConvertMarkupAnalytical(FunctorParams *functorParams) override;
 
     /**
      * See Object::ResetDrawing
      */
-    virtual int ResetDrawing(FunctorParams *functorParams);
+    int ResetDrawing(FunctorParams *functorParams) override;
 
     /**
      * See Object::ResetHorizontalAlignment
      */
-    virtual int ResetHorizontalAlignment(FunctorParams *functorParams);
+    int ResetHorizontalAlignment(FunctorParams *functorParams) override;
 
 private:
     //

@@ -8,7 +8,12 @@
 #ifndef __VRV_LAYER_ELEMENT_H__
 #define __VRV_LAYER_ELEMENT_H__
 
+#include <set>
+
+//----------------------------------------------------------------------------
+
 #include "atts_shared.h"
+#include "facsimileinterface.h"
 #include "linkinginterface.h"
 #include "object.h"
 
@@ -17,10 +22,12 @@ namespace vrv {
 class Alignment;
 class Beam;
 class BeamElementCoord;
+class FTrem;
 class Layer;
 class Mensur;
 class MeterSig;
 class Staff;
+class StaffAlignment;
 
 //----------------------------------------------------------------------------
 // LayerElement
@@ -30,7 +37,11 @@ class Staff;
  * This class is a base class for the Layer (<layer>) content.
  * It is not an abstract class but should not be instantiated directly.
  */
-class LayerElement : public Object, public LinkingInterface, public AttLabelled, public AttTyped {
+class LayerElement : public Object,
+                     public FacsimileInterface,
+                     public LinkingInterface,
+                     public AttLabelled,
+                     public AttTyped {
 public:
     /**
      * @name Constructors, destructors, reset and class name methods
@@ -38,22 +49,23 @@ public:
      */
     ///@{
     LayerElement();
-    LayerElement(std::string classid);
+    LayerElement(ClassId classId);
+    LayerElement(ClassId classId, const std::string &classIdStr);
     virtual ~LayerElement();
-    virtual void Reset();
-    virtual ClassId GetClassId() const { return LAYER_ELEMENT; }
+    void Reset() override;
     ///@}
 
     /**
-     * Copy assignment for resetting pointers
+     * Overriding CloneReset() method to be called after copy / assignment calls.
      */
-    LayerElement &operator=(const LayerElement &element);
-    
+    void CloneReset() override;
+
     /**
      * @name Getter to interfaces
      */
     ///@{
-    virtual LinkingInterface *GetLinkingInterface() { return dynamic_cast<LinkingInterface *>(this); }
+    FacsimileInterface *GetFacsimileInterface() override { return dynamic_cast<FacsimileInterface *>(this); }
+    LinkingInterface *GetLinkingInterface() override { return dynamic_cast<LinkingInterface *>(this); }
     ///@}
 
     /**
@@ -63,10 +75,20 @@ public:
     virtual bool HasToBeAligned() const { return false; }
 
     /**
+     * Return true if the element is part of a scoreDef or staffDef
+     */
+    virtual bool IsScoreDefElement() const { return false; }
+
+    /**
      * Return true if the element is relative to the staff and not to its parent.
      * It typically set to true for syl or artic.
      */
     virtual bool IsRelativeToStaff() const { return false; }
+
+    /**
+     * Return itself or the resolved @sameas (if any)
+     */
+    LayerElement *ThisOrSameasAsLink();
 
     /**
      * @name Set and get the flag for indication whether it is a ScoreDef or StaffDef attribute.
@@ -86,11 +108,11 @@ public:
     /** Return true if the element is a grace note */
     bool IsGraceNote();
     /** Return true if the element is has to be rederred as cue sized */
-    bool GetDrawingCueSize();
+    bool GetDrawingCueSize() const;
     /** Return true if the element is a note within a ligature */
     bool IsInLigature() const;
-    /** Return true if the element is a note or a chord within a fTrem */
-    bool IsInFTrem();
+    /** Return the FTrem parten if the element is a note or a chord within a fTrem */
+    FTrem *IsInFTrem();
     /**
      * Return the beam parent if in beam
      * Look if the note or rest is in a beam.
@@ -112,8 +134,8 @@ public:
      * @name Get the X and Y drawing position
      */
     ///@{
-    virtual int GetDrawingX() const;
-    virtual int GetDrawingY() const;
+    int GetDrawingX() const override;
+    int GetDrawingY() const override;
     ///@}
 
     /**
@@ -135,17 +157,16 @@ public:
      * Returns the drawing top and bottom taking into accound stem, etc.
      * We pass the doc as parameter in order to have access to the current drawing parameters.
      * withArtic specifies if the articulation sign needs to be taken into account or not.
-     * articPartType indicates if the inside or outside artic part has to be taken into account (inside is taken
+     * articType indicates if the inside or outside artic part has to be taken into account (inside is taken
      * into account in any case)
      */
-    int GetDrawingTop(Doc *doc, int staffSize, bool withArtic = true, ArticPartType articPartType = ARTIC_PART_INSIDE);
-    int GetDrawingBottom(
-        Doc *doc, int staffSize, bool withArtic = true, ArticPartType articPartType = ARTIC_PART_INSIDE);
+    int GetDrawingTop(Doc *doc, int staffSize, bool withArtic = true, ArticType articType = ARTIC_INSIDE);
+    int GetDrawingBottom(Doc *doc, int staffSize, bool withArtic = true, ArticType articType = ARTIC_INSIDE);
 
     /**
      * Return the drawing radius for notes and chords
      */
-    int GetDrawingRadius(Doc *doc);
+    int GetDrawingRadius(Doc *doc, bool isInLigature = false);
 
     /**
      * Alignment getter
@@ -160,6 +181,18 @@ public:
     Staff *GetCrossStaff(Layer *&layer) const;
 
     /**
+     * Retrieve the direction of a cross-staff situation
+     */
+    data_STAFFREL_basic GetCrossStaffRel();
+
+    /**
+     * Get the StaffAlignment for which overflows need to be calculated against.
+     * Set to NULL when the overflow needs to be ignored (e.g., for something between the staves in
+     * cross-staff situations.)
+     */
+    void GetOverflowStaffAlignments(StaffAlignment *&above, StaffAlignment *&below);
+
+    /**
      * @name Setter and getter for the Alignment the grace note is pointing to (NULL by default)
      */
     ///@{
@@ -169,124 +202,245 @@ public:
     ///@}
 
     /**
-     * Returns the duration if the child element has a DurationInterface
+     * Returns the duration if the element has a DurationInterface
      */
     double GetAlignmentDuration(Mensur *mensur = NULL, MeterSig *meterSig = NULL, bool notGraceOnly = true,
         data_NOTATIONTYPE notationType = NOTATIONTYPE_cmn);
+
+    /**
+     * Returns the duration if the content of the layer element with a @sameas attribute.
+     * Used only on beam, tuplet or ftrem have.
+     */
+    double GetSameAsContentAlignmentDuration(Mensur *mensur = NULL, MeterSig *meterSig = NULL, bool notGraceOnly = true,
+        data_NOTATIONTYPE notationType = NOTATIONTYPE_cmn) const;
+
+    double GetContentAlignmentDuration(Mensur *mensur = NULL, MeterSig *meterSig = NULL, bool notGraceOnly = true,
+        data_NOTATIONTYPE notationType = NOTATIONTYPE_cmn) const;
+
+    /**
+     * Get zone bounds using child elements with facsimile information.
+     * Returns true if bounds can be constructed, false otherwise.
+     */
+    bool GenerateZoneBounds(int *ulx, int *uly, int *lrx, int *lry);
+
+    /**
+     * Helper to adjust overlapping layers for notes, chords, stems, etc.
+     * Returns the shift of the adjustment
+     */
+    virtual int AdjustOverlappingLayers(
+        Doc *doc, const std::vector<LayerElement *> &otherElements, bool areDotsAdjusted, bool &isUnison);
+
+    /**
+     * Calculate note horizontal overlap with elemenents from another layers. Returns overlapMargin and index of other
+     * element if it's in unison with it
+     */
+    std::pair<int, bool> CalcElementHorizontalOverlap(Doc *doc, const std::vector<LayerElement *> &otherElements,
+        bool areDotsAdjusted, bool isChordElement, bool isLowerElement = false, bool unison = true);
 
     //----------//
     // Functors //
     //----------//
 
     /**
-     * See Object::ResetHorizontalAlignment
+     * See Object::AdjustBeams
      */
-    virtual int ResetHorizontalAlignment(FunctorParams *functorParams);
+    int AdjustBeams(FunctorParams *functorParams) override;
+
+    /**
+     * See Object::AdjustDots
+     */
+    int AdjustDots(FunctorParams *functorParams) override;
 
     /**
      * See Object::ResetHorizontalAlignment
      */
-    virtual int ResetVerticalAlignment(FunctorParams *functorParams);
+    int ResetHorizontalAlignment(FunctorParams *functorParams) override;
+
+    /**
+     * See Object::ResetVerticalAlignment
+     */
+    int ResetVerticalAlignment(FunctorParams *functorParams) override;
 
     /**
      * See Object::ApplyPPUFactor
      */
-    virtual int ApplyPPUFactor(FunctorParams *functorParams);
+    int ApplyPPUFactor(FunctorParams *functorParams) override;
 
     /**
      * See Object::AlignHorizontally
      */
-    virtual int AlignHorizontally(FunctorParams *functorParams);
+    int AlignHorizontally(FunctorParams *functorParams) override;
 
     /**
      * See Object::AdjustLayers
      */
-    virtual int AdjustLayers(FunctorParams *functorParams);
+    int AdjustLayers(FunctorParams *functorParams) override;
 
     /**
      * See Object::AdjustGraceXPos
      */
     ///@{
-    virtual int AdjustGraceXPos(FunctorParams *functorParams);
+    int AdjustGraceXPos(FunctorParams *functorParams) override;
     ///@}
+
+    /**
+     * See Object::AdjustTupletNumOverlap
+     */
+    int AdjustTupletNumOverlap(FunctorParams *functorParams) override;
 
     /**
      * See Object::AdjustXPos
      */
-    virtual int AdjustXPos(FunctorParams *functorParams);
+    int AdjustXPos(FunctorParams *functorParams) override;
 
     /**
      * See Object::AdjustXRelForTranscription
      */
-    virtual int AdjustXRelForTranscription(FunctorParams *);
+    int AdjustXRelForTranscription(FunctorParams *functorParams) override;
 
     /**
      * See Object::PrepareDrawingCueSize
      */
-    virtual int PrepareDrawingCueSize(FunctorParams *functorParams);
+    int PrepareDrawingCueSize(FunctorParams *functorParams) override;
 
     /**
      * See Object::PrepareCrossStaff
      */
     ///@{
-    virtual int PrepareCrossStaff(FunctorParams *functorParams);
-    virtual int PrepareCrossStaffEnd(FunctorParams *functorParams);
+    int PrepareCrossStaff(FunctorParams *functorParams) override;
+    int PrepareCrossStaffEnd(FunctorParams *functorParams) override;
     ///@}
 
     /**
      * See Object::PreparePointersByLayer
      */
-    virtual int PreparePointersByLayer(FunctorParams *functorParams);
+    int PreparePointersByLayer(FunctorParams *functorParams) override;
+
+    /**
+     * See Object::PrepareDelayedTurns
+     */
+    int PrepareDelayedTurns(FunctorParams *functorParams) override;
 
     /**
      * See Object::PrepareTimePointing
      */
-    virtual int PrepareTimePointing(FunctorParams *functorParams);
+    int PrepareTimePointing(FunctorParams *functorParams) override;
 
     /**
      * See Object::PrepareTimeSpanning
      */
-    virtual int PrepareTimeSpanning(FunctorParams *functorParams);
+    int PrepareTimeSpanning(FunctorParams *functorParams) override;
 
     /**
      * See Object::SetAlignmentPitchPos
      */
-    virtual int SetAlignmentPitchPos(FunctorParams *functorParams);
+    int SetAlignmentPitchPos(FunctorParams *functorParams) override;
 
     /**
-     * See Object::FindTimeSpanningLayerElements
+     * See Object::FindSpannedLayerElements
      */
-    virtual int FindTimeSpanningLayerElements(FunctorParams *functorParams);
+    int FindSpannedLayerElements(FunctorParams *functorParams) override;
+
+    /**
+     * See Object::LayerCountInTimeSpan
+     */
+    int LayerCountInTimeSpan(FunctorParams *functorParams) override;
+
+    /**
+     * See Object::LayerElementsInTimeSpan
+     */
+    int LayerElementsInTimeSpan(FunctorParams *functorParams) override;
 
     /**
      * See Object::CalcOnsetOffset
      */
     ///@{
-    virtual int CalcOnsetOffset(FunctorParams *functorParams);
+    int CalcOnsetOffset(FunctorParams *functorParams) override;
     ///@}
 
     /**
      * See Object::ResolveMIDITies
      */
     ///@{
-    virtual int ResolveMIDITies(FunctorParams *);
+    int ResolveMIDITies(FunctorParams *functorParams) override;
     ///@}
+
+    /**
+     * @name See Object::GenerateMIDI
+     */
+    ///@{
+    int GenerateMIDI(FunctorParams *functorParams) override;
+    ///@}
+
+    /**
+     * See Object::GenerateTimemap
+     */
+    int GenerateTimemap(FunctorParams *functorParams) override;
 
     /**
      * See Object::ResetDrawing
      */
-    virtual int ResetDrawing(FunctorParams *);
+    int ResetDrawing(FunctorParams *functorParams) override;
+
+    /**
+     * See Object::GetRelativeLayerElement
+     */
+    int GetRelativeLayerElement(FunctorParams *functorParams) override;
+
+    /**
+     * See Object::PrepareSlurs
+     */
+    int PrepareSlurs(FunctorParams *functorParams) override;
+
+protected:
+    /**
+     * Helper to figure whether two chords are in fully in unison based on the locations of the notes.
+     * This function assumes that two chords are already in unison and checks whether chords can overlap with
+     * their unison notes or if they should be placed separately.
+     * Returns true if all elements can safely overlap.
+     */
+    virtual int CountElementsInUnison(
+        const std::set<int> &firstChord, const std::set<int> &secondChord, data_STEMDIRECTION stemDirection);
+
+    /**
+     * The note locations w.r.t. each staff, implemented for note and chord
+     */
+    virtual MapOfNoteLocs CalcNoteLocations(NotePredicate predicate = NULL) { return {}; }
+
+    /**
+     * The dot locations w.r.t. each staff, implemented for note and chord
+     * Since dots for notes on staff lines can be shifted upwards or downwards, there are two choices: primary and
+     * secondary
+     */
+    virtual MapOfDotLocs CalcDotLocations(int layerCount, bool primary) { return {}; }
+
+    /**
+     * Calculate the optimal dot location for a note or chord
+     * Takes two layers into account in order to avoid collisions of dots between corresponding notes/chords
+     */
+    MapOfDotLocs CalcOptimalDotLocations();
+
+    //----------------//
+    // Static methods //
+    //----------------//
+
+    /**
+     * Helper to count the number of dots
+     * This can be used as an indicator to choose between different sets of dots
+     */
+    static int GetDotCount(const MapOfDotLocs &dotLocations);
+
+    /**
+     * Helper to count the collisions between two sets of dots
+     */
+    static int GetCollisionCount(const MapOfDotLocs &dotLocs1, const MapOfDotLocs &dotLocs2);
 
 private:
-    int GetDrawingArticulationTopOrBottom(data_STAFFREL_basic place, ArticPartType type);
+    int GetDrawingArticulationTopOrBottom(data_STAFFREL place, ArticType type);
 
 public:
     /** Absolute position X. This is used for facsimile (transcription) encoding */
     int m_xAbs;
-    /**
-     * This stores a pointer to the corresponding BeamElementCoord(currentDur > DUR_4)
-     */
-    BeamElementCoord *m_beamElementCoord;
     /**
      * This stores a pointer to the cross-staff (if any) and the appropriate layer
      * See Object::PrepareCrossStaff
@@ -315,7 +469,7 @@ protected:
     int m_drawingXRel;
 
     /**
-     * The cached drawing cue size set by PrepareDarwingCueSize
+     * The cached drawing cue size set by PrepareDrawingCueSize
      */
     bool m_drawingCueSize;
 

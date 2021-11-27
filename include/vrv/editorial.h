@@ -10,8 +10,8 @@
 
 #include "atts_critapp.h"
 #include "atts_shared.h"
-#include "boundary.h"
 #include "object.h"
+#include "systemboundary.h"
 
 namespace vrv {
 
@@ -35,7 +35,7 @@ class TextElement;
  * It is not an abstract class but should not be instantiated directly.
  * It can be both a container (in score-based MEI) and a boundary (in page-based MEI).
  */
-class EditorialElement : public Object, public BoundaryStartInterface, public AttLabelled, public AttTyped {
+class EditorialElement : public Object, public SystemElementStartInterface, public AttLabelled, public AttTyped {
 public:
     /**
      * @name Constructors, destructors, reset and class name methods
@@ -43,17 +43,17 @@ public:
      */
     ///@{
     EditorialElement();
-    EditorialElement(std::string classid);
+    EditorialElement(ClassId classId);
+    EditorialElement(ClassId classId, const std::string &classIdStr);
     virtual ~EditorialElement();
-    virtual void Reset();
-    virtual ClassId GetClassId() const { return EDITORIAL_ELEMENT; }
+    void Reset() override;
     ///@}
 
     /**
      * @name Add children to an editorial element.
      */
     ///@{
-    virtual void AddChild(Object *object);
+    bool IsSupportedChild(Object *object) override;
     ///@}
 
     //----------//
@@ -63,28 +63,28 @@ public:
     /**
      * See Object::ConvertToPageBased
      */
-    virtual int ConvertToPageBased(FunctorParams *functorParams);
-    virtual int ConvertToPageBasedEnd(FunctorParams *functorParams);
+    int ConvertToPageBased(FunctorParams *functorParams) override;
+    int ConvertToPageBasedEnd(FunctorParams *functorParams) override;
 
     /**
      * See Object::PrepareBoundaries
      */
-    virtual int PrepareBoundaries(FunctorParams *functorParams);
+    int PrepareBoundaries(FunctorParams *functorParams) override;
 
     /**
      * See Object::ResetDrawing
      */
-    virtual int ResetDrawing(FunctorParams *functorParams);
+    int ResetDrawing(FunctorParams *functorParams) override;
 
     /**
      * See Object::CastOffSystems
      */
-    virtual int CastOffSystems(FunctorParams *functorParams);
+    int CastOffSystems(FunctorParams *functorParams) override;
 
     /**
      * See Object::CastOffEncoding
      */
-    virtual int CastOffEncoding(FunctorParams *functorParams);
+    int CastOffEncoding(FunctorParams *functorParams) override;
 
 private:
     //

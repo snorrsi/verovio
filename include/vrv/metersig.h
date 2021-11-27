@@ -23,7 +23,7 @@ class ScoreDefInterface;
 /**
  * This class models the MEI <meterSig> element.
  */
-class MeterSig : public LayerElement, public AttMeterSigLog, public AttMeterSigVis {
+class MeterSig : public LayerElement, public AttEnclosingChars, public AttMeterSigLog, public AttMeterSigVis {
 public:
     /**
      * @name Constructors, destructors, and other standard methods
@@ -31,29 +31,35 @@ public:
      */
     ///@{
     MeterSig();
-    MeterSig(const ScoreDefInterface *meterSigAttr);
-    void Init();
     virtual ~MeterSig();
-    virtual void Reset();
-    virtual std::string GetClassName() const { return "MeterSig"; }
-    virtual ClassId GetClassId() const { return METERSIG; }
-    virtual Object *Clone() const { return new MeterSig(*this); }
+    Object *Clone() const override { return new MeterSig(*this); }
+    void Reset() override;
+    std::string GetClassName() const override { return "MeterSig"; }
     ///@}
 
     /** Override the method since alignment is required */
-    virtual bool HasToBeAligned() const { return true; }
+    bool HasToBeAligned() const override { return true; }
 
-    /** Convert rendition to form */
-    meterSigVis_FORM meterSigDefaultVisToMeterSigVis(meterSigDefaultVis_METERFORM form);
+    /** Override the method since check is required */
+    bool IsScoreDefElement() const override { return (this->GetParent() && this->GetFirstAncestor(SCOREDEF)); }
+
+    /** Evaluate additive meter counts */
+    int GetTotalCount() const;
+
+    /** Retrieves the symbol glyph */
+    wchar_t GetSymbolGlyph() const;
+
+    /** Retrieve parentheses from the enclose attribute */
+    std::pair<wchar_t, wchar_t> GetEnclosingGlyphs(bool smallGlpyh) const;
 
     //----------//
     // Functors //
     //----------//
 
     /**
-     * See Object::FindSpaceInReferenceAlignments
+     * See Object::LayerCountInTimeSpan
      */
-    virtual int FindSpaceInReferenceAlignments(FunctorParams *functorParams);
+    int LayerCountInTimeSpan(FunctorParams *functorParams) override;
 
 private:
     //

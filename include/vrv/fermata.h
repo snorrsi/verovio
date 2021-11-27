@@ -9,13 +9,14 @@
 #define __VRV_FERMATA_H__
 
 #include "atts_cmn.h"
+#include "atts_externalsymbols.h"
 #include "atts_visual.h"
 #include "controlelement.h"
 #include "timeinterface.h"
 
 namespace vrv {
 
-class ConvertAnalyticalMarkupParams;
+class ConvertMarkupAnalyticalParams;
 
 //----------------------------------------------------------------------------
 // Fermata
@@ -27,8 +28,10 @@ class ConvertAnalyticalMarkupParams;
 class Fermata : public ControlElement,
                 public TimePointInterface,
                 public AttColor,
+                public AttEnclosingChars,
+                public AttExtSym,
                 public AttFermataVis,
-                public AttPlacement {
+                public AttPlacementRelStaff {
 public:
     /**
      * @name Constructors, destructors, and other standard methods
@@ -37,23 +40,42 @@ public:
     ///@{
     Fermata();
     virtual ~Fermata();
-    virtual void Reset();
-    virtual std::string GetClassName() const { return "Fermata"; }
-    virtual ClassId GetClassId() const { return FERMATA; }
+    Object *Clone() const override { return new Fermata(*this); }
+    void Reset() override;
+    std::string GetClassName() const override { return "Fermata"; }
     ///@}
 
     /**
      * @name Getter to interfaces
      */
     ///@{
-    virtual TimePointInterface *GetTimePointInterface() { return dynamic_cast<TimePointInterface *>(this); }
+    TimePointInterface *GetTimePointInterface() override { return dynamic_cast<TimePointInterface *>(this); }
     ///@}
 
     /**
      * Helpler for converting markup (from Note, Chord, Rest, MRest)
      */
     void ConvertFromAnalyticalMarkup(
-        AttFermataPresent *fermataPresent, const std::string &uuid, ConvertAnalyticalMarkupParams *params);
+        AttFermataPresent *fermataPresent, const std::string &uuid, ConvertMarkupAnalyticalParams *params);
+
+    /**
+     * Get the SMuFL glyph for the fermata based on type, shape or glyph.num
+     */
+    wchar_t GetFermataGlyph() const;
+
+    /**
+     * Retrieve parentheses / brackets from the enclose attribute
+     */
+    std::pair<wchar_t, wchar_t> GetEnclosingGlyphs() const;
+
+    //----------------//
+    // Static methods //
+    //----------------//
+
+    /**
+     * Retrieves the vertical alignment for the fermata SMuFL code
+     */
+    static data_VERTICALALIGNMENT GetVerticalAlignment(wchar_t code);
 
     //----------//
     // Functors //

@@ -1,0 +1,61 @@
+/////////////////////////////////////////////////////////////////////////////
+// Name:        pitchinfection.h
+// Author:      Laurent Pugin
+// Created:     2019
+// Copyright (c) Authors and others. All rights reserved.
+/////////////////////////////////////////////////////////////////////////////
+
+#ifndef __VRV_PITCH_INFLECTION_H__
+#define __VRV_PITCH_INFLECTION_H__
+
+#include "controlelement.h"
+#include "timeinterface.h"
+
+namespace vrv {
+
+//----------------------------------------------------------------------------
+// PitchInflection
+//----------------------------------------------------------------------------
+
+/**
+ * This class models the MEI <dir> element.
+ */
+class PitchInflection : public ControlElement, public TimeSpanningInterface {
+public:
+    /**
+     * @name Constructors, destructors, and other standard methods
+     * Reset method reset all attribute classes
+     */
+    ///@{
+    PitchInflection();
+    virtual ~PitchInflection();
+    Object *Clone() const override { return new PitchInflection(*this); }
+    void Reset() override;
+    std::string GetClassName() const override { return "PitchInflection"; }
+    ///@}
+
+    /**
+     * @name Getter to interfaces
+     */
+    ///@{
+    TimePointInterface *GetTimePointInterface() override { return dynamic_cast<TimePointInterface *>(this); }
+    TimeSpanningInterface *GetTimeSpanningInterface() override { return dynamic_cast<TimeSpanningInterface *>(this); }
+    ///@}
+
+    //----------//
+    // Functors //
+    //----------//
+
+protected:
+    //
+private:
+    //
+public:
+    //
+private:
+    //
+};
+
+} // namespace vrv
+
+#endif

@@ -13,6 +13,7 @@
 
 namespace vrv {
 
+class LabelAbbr;
 class Syl;
 
 //----------------------------------------------------------------------------
@@ -28,16 +29,23 @@ public:
     ///@{
     Verse();
     virtual ~Verse();
-    virtual void Reset();
-    virtual std::string GetClassName() const { return "Verse"; }
-    virtual ClassId GetClassId() const { return VERSE; }
+    Object *Clone() const override { return new Verse(*this); }
+    void Reset() override;
+    std::string GetClassName() const override { return "Verse"; }
     ///@}
 
     /**
      * Add an element (a syl) to a verse.
      * Only Syl elements will be actually added to the verse.
      */
-    virtual void AddChild(Object *object);
+    bool IsSupportedChild(Object *object) override;
+
+    /**
+     * Calculate the adjustment according to the overlap and the free space available before.
+     * Will move the verse accordingly.
+     * Called from Verse::AdjustSylSpacing and System::AdjustSylSpacingEnd
+     */
+    int AdjustPosition(int &overlap, int freeSpace, Doc *doc);
 
     //----------//
     // Functors //
@@ -46,17 +54,31 @@ public:
     /**
      * See Object::AlignVertically
      */
-    virtual int AlignVertically(FunctorParams *functorParams);
+    int AlignVertically(FunctorParams *functorParams) override;
+
+    /**
+     * See Object::AdjustSylSpacing
+     */
+    int AdjustSylSpacing(FunctorParams *functorParams) override;
 
     /**
      * See Object::PrepareProcessingLists
      */
-    virtual int PrepareProcessingLists(FunctorParams *functorParams);
+    int PrepareProcessingLists(FunctorParams *functorParams) override;
+
+    /**
+     * See Object::ResetDrawing
+     */
+    int ResetDrawing(FunctorParams *functorParams) override;
 
 private:
     //
 public:
-    //
+    /**
+     *  A pointer to the labelAbbr
+     */
+    LabelAbbr *m_drawingLabelAbbr;
+
 private:
 };
 

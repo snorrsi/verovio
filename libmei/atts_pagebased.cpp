@@ -72,7 +72,7 @@ bool AttSurface::HasSurface() const
 
 /* include <attsurface> */
 
-bool Att::SetPagebased(Object *element, std::string attrType, std::string attrValue)
+bool Att::SetPagebased(Object *element, const std::string &attrType, const std::string &attrValue)
 {
     if (element->HasAttClass(ATT_SURFACE)) {
         AttSurface *att = dynamic_cast<AttSurface *>(element);
@@ -92,7 +92,7 @@ void Att::GetPagebased(const Object *element, ArrayOfStrAttr *attributes)
         const AttSurface *att = dynamic_cast<const AttSurface *>(element);
         assert(att);
         if (att->HasSurface()) {
-            attributes->push_back(std::make_pair("surface", att->StrToStr(att->GetSurface())));
+            attributes->push_back({ "surface", att->StrToStr(att->GetSurface()) });
         }
     }
 }

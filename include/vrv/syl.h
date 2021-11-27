@@ -9,6 +9,7 @@
 #define __VRV_SYL_H__
 
 #include "atts_shared.h"
+#include "facsimileinterface.h"
 #include "layerelement.h"
 #include "timeinterface.h"
 
@@ -42,34 +43,35 @@ public:
     ///@{
     Syl();
     virtual ~Syl();
-    virtual void Reset();
-    virtual std::string GetClassName() const { return "Syl"; }
-    virtual ClassId GetClassId() const { return SYL; }
+    Object *Clone() const override { return new Syl(*this); }
+    void Reset() override;
+    std::string GetClassName() const override { return "Syl"; }
     ///@}
 
     /** Override the method since it is align to the staff */
-    virtual bool IsRelativeToStaff() const { return true; }
+    bool IsRelativeToStaff() const override { return true; }
 
     /**
      * @name Getter to interfaces
      */
     ///@{
-    virtual TimePointInterface *GetTimePointInterface() { return dynamic_cast<TimePointInterface *>(this); }
-    virtual TimeSpanningInterface *GetTimeSpanningInterface() { return dynamic_cast<TimeSpanningInterface *>(this); }
+    TimePointInterface *GetTimePointInterface() override { return dynamic_cast<TimePointInterface *>(this); }
+    TimeSpanningInterface *GetTimeSpanningInterface() override { return dynamic_cast<TimeSpanningInterface *>(this); }
     ///@}
 
     /**
      * Add an element (text, rend. etc.) to a syl.
      * Only supported elements will be actually added to the child list.
      */
-    virtual void AddChild(Object *object);
-           
+    bool IsSupportedChild(Object *object) override;
+
     /**
-     * Calculate the adjustment according to the overlap and the free space available before.
-     * Will move the syllable accordingly.
-     * Called from Syl::AdjustSylSpacing and System::AdjustSylSpacingEnd
+     * Calculate the spacing needed depending on the @worpos and @con
      */
-    int CalcHorizontalAdjustment(int &overlap, AdjustSylSpacingParams *params);
+    int CalcConnectorSpacing(Doc *doc, int staffSize);
+
+    int GetDrawingWidth() const;
+    int GetDrawingHeight() const;
 
     //----------//
     // Functors //
@@ -78,22 +80,20 @@ public:
     /**
      * See Object::PrepareLyrics
      */
-    virtual int PrepareLyrics(FunctorParams *functorParams);
+    int PrepareLyrics(FunctorParams *functorParams) override;
 
     /**
      * See Object::FillStaffCurrentTimeSpanning
      */
-    virtual int FillStaffCurrentTimeSpanning(FunctorParams *functorParams);
-
-    /**
-     * See Object::AdjustSylSpacing
-     */
-    virtual int AdjustSylSpacing(FunctorParams *functorParams);
+    int FillStaffCurrentTimeSpanning(FunctorParams *functorParams) override;
 
     /**
      * See Object::ResetDrawing
      */
-    virtual int ResetDrawing(FunctorParams *functorParams);
+    int ResetDrawing(FunctorParams *functorParams) override;
+
+    /** Create a default zone for a syl based on syllable. */
+    bool CreateDefaultZone(Doc *doc);
 
 private:
     //
@@ -103,7 +103,7 @@ public:
      * Value is 1 by default, set in PrepareLyrics
      */
     int m_drawingVerse;
-                
+
     /**
      * A pointer to the next syllable of the word.
      * It is not set when the end of the lyric is not another syl but a note for extenders

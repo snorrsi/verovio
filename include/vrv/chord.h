@@ -15,6 +15,7 @@
 
 namespace vrv {
 
+class Dots;
 class StaffAlignment;
 
 //----------------------------------------------------------------------------
@@ -48,29 +49,34 @@ public:
     ///@{
     Chord();
     virtual ~Chord();
-    virtual void Reset();
-    virtual std::string GetClassName() const { return "Chord"; }
-    virtual ClassId GetClassId() const { return CHORD; }
+    Object *Clone() const override { return new Chord(*this); }
+    void Reset() override;
+    std::string GetClassName() const override { return "Chord"; }
     ///@}
 
     /**
      * @name Getter to interfaces
      */
     ///@{
-    virtual DurationInterface *GetDurationInterface() { return dynamic_cast<DurationInterface *>(this); }
-    virtual StemmedDrawingInterface *GetStemmedDrawingInterface()
+    DurationInterface *GetDurationInterface() override { return dynamic_cast<DurationInterface *>(this); }
+    StemmedDrawingInterface *GetStemmedDrawingInterface() override
     {
         return dynamic_cast<StemmedDrawingInterface *>(this);
     }
     ///@}
 
     /** Override the method since alignment is required */
-    virtual bool HasToBeAligned() const { return true; }
+    bool HasToBeAligned() const override { return true; }
 
     /**
      * Add an element (only note supported) to a chord.
      */
-    virtual void AddChild(Object *object);
+    bool IsSupportedChild(Object *object) override;
+
+    /**
+     * Overwritten method for chord
+     */
+    void AddChild(Object *object) override;
 
     /**
      * Return the maximum and minimum Y positions of the notes in the chord
@@ -88,15 +94,18 @@ public:
     ///@}
 
     /**
-     * Return the cross staff above or below (if  any).
+     * Return min or max note X position
      */
-    void GetCrossStaffExtremes(Staff *&staffAbove, Staff *&staffBelow);
+    ///@{
+    int GetXMin();
+    int GetXMax();
+    ///@}
 
     /**
-     * Check if the part of a chord needs to be taken into account as overflow above or below in case of cross-staff
-     * chord.
+     * Return the cross staff above or below (if  any).
      */
-    void GetCrossStaffOverflows(LayerElement *element, StaffAlignment *alignment, bool &skipAbove, bool &skipBelow);
+    void GetCrossStaffExtremes(
+        Staff *&staffAbove, Staff *&staffBelow, Layer **layerAbove = NULL, Layer **layerBelow = NULL);
 
     /**
      * Return true if the chord has some cross staff notes.
@@ -121,8 +130,9 @@ public:
      * If necessary look at the glyph anchor (if any).
      */
     ///@{
-    virtual Point GetStemUpSE(Doc *doc, int staffSize, bool isCueSize);
-    virtual Point GetStemDownNW(Doc *doc, int staffSize, bool isCueSize);
+    Point GetStemUpSE(Doc *doc, int staffSize, bool isCueSize) override;
+    Point GetStemDownNW(Doc *doc, int staffSize, bool isCueSize) override;
+    int CalcStemLenInThirdUnits(Staff *staff, data_STEMDIRECTION stemDir) override;
     ///@}
 
     /**
@@ -131,48 +141,92 @@ public:
     bool IsVisible();
 
     /**
+     * Return true if the chord has two notes with 1 diatonic step difference in the specific staff
+     */
+    bool HasAdjacentNotesInStaff(Staff *staff);
+
+    /**
      * Return true if the chord has at least one note with a @dots > 0
      */
     bool HasNoteWithDots();
+
+    /**
+     * Helper to adjust overlapping layers for chords
+     * Returns the shift of the adjustment
+     */
+    int AdjustOverlappingLayers(
+        Doc *doc, const std::vector<LayerElement *> &otherElements, bool areDotsAdjusted, bool &isUnison) override;
 
     //----------//
     // Functors //
     //----------//
 
     /**
-     * See Object::ConvertAnalyticalMarkup
+     * See Object::AdjustCrossStaffYPos
+     */
+    int AdjustCrossStaffYPos(FunctorParams *functorParams) override;
+
+    /**
+     * See Object::AdjustArtic
+     */
+    int AdjustArtic(FunctorParams *functorParams) override;
+
+    /**
+     * See Object::ConvertMarkupAnalytical
      */
     ///@{
-    virtual int ConvertAnalyticalMarkup(FunctorParams *functorParams);
-    virtual int ConvertAnalyticalMarkupEnd(FunctorParams *functorParams);
+    int ConvertMarkupAnalytical(FunctorParams *functorParams) override;
+    int ConvertMarkupAnalyticalEnd(FunctorParams *functorParams) override;
     ///@}
+
+    /**
+     * See Object::CalcArtic
+     */
+    int CalcArtic(FunctorParams *functorParams) override;
 
     /**
      * See Object::CalcStem
      */
-    virtual int CalcStem(FunctorParams *functorParams);
+    int CalcStem(FunctorParams *functorParams) override;
 
     /**
      * See Object::CalcDots
      */
-    virtual int CalcDots(FunctorParams *functorParams);
+    int CalcDots(FunctorParams *functorParams) override;
 
     /**
      * See Object::PrepareLayerElementParts
      */
-    virtual int PrepareLayerElementParts(FunctorParams *functorParams);
+    int PrepareLayerElementParts(FunctorParams *functorParams) override;
 
     /**
-     * See Object::GenerateMIDIEnd
+     * See Object::CalcOnsetOffsetEnd
      */
-    virtual int CalcOnsetOffsetEnd(FunctorParams *functorParams);
+    int CalcOnsetOffsetEnd(FunctorParams *functorParams) override;
 
     /**
      * See Object::ResetDrawing
      */
-    virtual int ResetDrawing(FunctorParams *functorParams);
+    int ResetDrawing(FunctorParams *functorParams) override;
+
+    /**
+     * See Object::AdjustCrossStaffContent
+     */
+    int AdjustCrossStaffContent(FunctorParams *functorParams) override;
 
 protected:
+    /**
+     * The note locations w.r.t. each staff
+     */
+    MapOfNoteLocs CalcNoteLocations(NotePredicate predicate = NULL) override;
+
+    /**
+     * The dot locations w.r.t. each staff
+     * Since dots for notes on staff lines can be shifted upwards or downwards, there are two choices: primary and
+     * secondary
+     */
+    MapOfDotLocs CalcDotLocations(int layerCount, bool primary) override;
+
     /**
      * Clear the m_clusters vector and delete all the objects.
      */
@@ -181,7 +235,7 @@ protected:
     /**
      * Filter the flat list and keep only Note elements.
      */
-    virtual void FilterList(ListOfObjects *childlist);
+    void FilterList(ArrayOfObjects *childList) override;
 
 public:
     mutable std::list<ChordCluster *> m_clusters;

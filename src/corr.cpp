@@ -21,7 +21,9 @@ namespace vrv {
 // Corr
 //----------------------------------------------------------------------------
 
-Corr::Corr() : EditorialElement("corr-"), AttSource()
+static const ClassRegistrar<Corr> s_factory("corr", CORR);
+
+Corr::Corr() : EditorialElement(CORR, "corr-"), AttSource()
 {
     RegisterAttClass(ATT_SOURCE);
 

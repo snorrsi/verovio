@@ -13,15 +13,18 @@
 
 //----------------------------------------------------------------------------
 
+#include "comparison.h"
+#include "vrv.h"
+
 namespace vrv {
 
 //----------------------------------------------------------------------------
 // TextDirInterface
 //----------------------------------------------------------------------------
 
-TextDirInterface::TextDirInterface() : Interface(), AttPlacement()
+TextDirInterface::TextDirInterface() : Interface(), AttPlacementRelStaff()
 {
-    RegisterInterfaceAttClass(ATT_PLACEMENT);
+    RegisterInterfaceAttClass(ATT_PLACEMENTRELSTAFF);
 
     Reset();
 }
@@ -30,7 +33,17 @@ TextDirInterface::~TextDirInterface() {}
 
 void TextDirInterface::Reset()
 {
-    ResetPlacement();
+    ResetPlacementRelStaff();
+}
+
+int TextDirInterface::GetNumberOfLines(Object *object)
+{
+    assert(object);
+
+    ListOfObjects lbs;
+    ClassIdComparison matches(LB);
+    object->FindAllDescendantByComparison(&lbs, &matches);
+    return ((int)lbs.size() + 1);
 }
 
 } // namespace vrv

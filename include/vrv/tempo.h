@@ -38,34 +38,51 @@ public:
     ///@{
     Tempo();
     virtual ~Tempo();
-    virtual void Reset();
-    virtual std::string GetClassName() const { return "Tempo"; }
-    virtual ClassId GetClassId() const { return TEMPO; }
+    Object *Clone() const override { return new Tempo(*this); }
+    void Reset() override;
+    std::string GetClassName() const override { return "Tempo"; }
     ///@}
 
     /**
      * @name Getter to interfaces
      */
     ///@{
-    virtual TextDirInterface *GetTextDirInterface() { return dynamic_cast<TextDirInterface *>(this); }
-    virtual TimePointInterface *GetTimePointInterface() { return dynamic_cast<TimePointInterface *>(this); }
+    TextDirInterface *GetTextDirInterface() override { return dynamic_cast<TextDirInterface *>(this); }
+    TimePointInterface *GetTimePointInterface() override { return dynamic_cast<TimePointInterface *>(this); }
     ///@}
 
     /**
      * Add an element (text, rend. etc.) to a tempo.
      * Only supported elements will be actually added to the child list.
      */
-    virtual void AddChild(Object *object);
+    bool IsSupportedChild(Object *object) override;
+
+    /**
+     * @name Get the X drawing position
+     */
+    ///@{
+    int GetDrawingXRelativeToStaff(int staffN);
 
     //----------//
     // Functors //
     //----------//
+
+    /**
+     * See Object::AdjustTempoX
+     */
+    int AdjustTempo(FunctorParams *functorParams) override;
+
+    /**
+     * See Object::ResetDrawing
+     */
+    int ResetDrawing(FunctorParams *functorParams) override;
 
 private:
     //
 public:
     //
 private:
+    std::map<int, int> m_drawingXRels;
 };
 
 } // namespace vrv

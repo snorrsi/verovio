@@ -72,7 +72,7 @@ bool AttHarmLog::HasChordref() const
 
 /* include <attchordref> */
 
-bool Att::SetHarmony(Object *element, std::string attrType, std::string attrValue)
+bool Att::SetHarmony(Object *element, const std::string &attrType, const std::string &attrValue)
 {
     if (element->HasAttClass(ATT_HARMLOG)) {
         AttHarmLog *att = dynamic_cast<AttHarmLog *>(element);
@@ -92,7 +92,7 @@ void Att::GetHarmony(const Object *element, ArrayOfStrAttr *attributes)
         const AttHarmLog *att = dynamic_cast<const AttHarmLog *>(element);
         assert(att);
         if (att->HasChordref()) {
-            attributes->push_back(std::make_pair("chordref", att->StrToStr(att->GetChordref())));
+            attributes->push_back({ "chordref", att->StrToStr(att->GetChordref()) });
         }
     }
 }

@@ -25,6 +25,7 @@ class Rend : public TextElement,
              public AreaPosInterface,
              public AttColor,
              public AttLang,
+             public AttTextRendition,
              public AttTypography,
              public AttWhitespace {
 public:
@@ -35,10 +36,9 @@ public:
     ///@{
     Rend();
     virtual ~Rend();
-    virtual Object *Clone() const { return new Rend(*this); }
-    virtual void Reset();
-    virtual std::string GetClassName() const { return "Rend"; }
-    virtual ClassId GetClassId() const { return REND; }
+    Object *Clone() const override { return new Rend(*this); }
+    void Reset() override;
+    std::string GetClassName() const override { return "Rend"; }
     ///@}
 
     /**
@@ -52,7 +52,7 @@ public:
      * Add an element (text, rend. etc.) to a rend.
      * Only supported elements will be actually added to the child list.
      */
-    virtual void AddChild(Object *object);
+    bool IsSupportedChild(Object *object) override;
 
     //----------//
     // Functors //
@@ -62,7 +62,7 @@ public:
      * See Object::AlignVertically
      */
     ///@{
-    virtual int AlignVertically(FunctorParams *functorParams);
+    int AlignVertically(FunctorParams *functorParams) override;
     ///@}
 
 private:

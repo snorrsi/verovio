@@ -22,7 +22,7 @@ namespace vrv {
  * as <dir>, <tempo>, or <dynam>
  * It is not an abstract class but should not be instanciated directly.
  */
-class TextDirInterface : public Interface, public AttPlacement {
+class TextDirInterface : public Interface, public AttPlacementRelStaff {
 public:
     /**
      * @name Constructors, destructors, reset methods
@@ -31,9 +31,14 @@ public:
     ///@{
     TextDirInterface();
     virtual ~TextDirInterface();
-    virtual void Reset();
-    virtual InterfaceId IsInterface() { return INTERFACE_TEXT_DIR; }
+    void Reset() override;
+    InterfaceId IsInterface() const override { return INTERFACE_TEXT_DIR; }
     ///@}
+
+    /**
+     * Return the number of lines in the text object by counting <lb> children
+     */
+    int GetNumberOfLines(Object *object);
 
 private:
     //

@@ -25,18 +25,23 @@ namespace vrv {
 // Dir
 //----------------------------------------------------------------------------
 
+static const ClassRegistrar<Dir> s_factory("dir", DIR);
+
 Dir::Dir()
-    : ControlElement("dir-")
+    : ControlElement(DIR, "dir-")
     , TextListInterface()
     , TextDirInterface()
     , TimeSpanningInterface()
+    , AttExtender()
     , AttLang()
+    , AttLineRendBase()
     , AttVerticalGroup()
 {
     RegisterInterface(TextDirInterface::GetAttClasses(), TextDirInterface::IsInterface());
     RegisterInterface(TimeSpanningInterface::GetAttClasses(), TimeSpanningInterface::IsInterface());
     RegisterAttClass(ATT_LANG);
     RegisterAttClass(ATT_EXTENDER);
+    RegisterAttClass(ATT_LINERENDBASE);
     RegisterAttClass(ATT_VERTICALGROUP);
 
     Reset();
@@ -49,12 +54,13 @@ void Dir::Reset()
     ControlElement::Reset();
     TextDirInterface::Reset();
     TimeSpanningInterface::Reset();
-    ResetLang();
     ResetExtender();
+    ResetLang();
+    ResetLineRendBase();
     ResetVerticalGroup();
 }
 
-void Dir::AddChild(Object *child)
+bool Dir::IsSupportedChild(Object *child)
 {
     if (child->Is({ LB, REND, TEXT })) {
         assert(dynamic_cast<TextElement *>(child));
@@ -63,13 +69,19 @@ void Dir::AddChild(Object *child)
         assert(dynamic_cast<EditorialElement *>(child));
     }
     else {
-        LogError("Adding '%s' to a '%s'", child->GetClassName().c_str(), this->GetClassName().c_str());
-        assert(false);
+        return false;
     }
+    return true;
+}
 
-    child->SetParent(this);
-    m_children.push_back(child);
-    Modify();
+bool Dir::AreChildrenAlignedTo(data_HORIZONTALALIGNMENT alignment) const
+{
+    const ArrayOfObjects *children = GetChildren();
+    bool hasHalign = std::any_of(children->begin(), children->end(), [&alignment](Object *child) {
+        AttHorizontalAlign *hAlign = dynamic_cast<AttHorizontalAlign *>(child);
+        return (hAlign && (hAlign->GetHalign() == alignment));
+    });
+    return hasHalign;
 }
 
 //----------------------------------------------------------------------------

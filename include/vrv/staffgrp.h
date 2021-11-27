@@ -11,9 +11,14 @@
 #include "atts_mei.h"
 #include "atts_shared.h"
 #include "atts_visual.h"
+#include "grpsym.h"
 #include "object.h"
+#include "staffdef.h"
 
 namespace vrv {
+
+class Label;
+class LabelAbbr;
 
 //----------------------------------------------------------------------------
 // StaffGrp
@@ -27,6 +32,7 @@ class StaffGrp : public Object,
                  public ObjectListInterface,
                  public AttBasic,
                  public AttLabelled,
+                 public AttNNumberLike,
                  public AttStaffGroupingSym,
                  public AttStaffGrpVis,
                  public AttTyped {
@@ -38,17 +44,16 @@ public:
     ///@{
     StaffGrp();
     virtual ~StaffGrp();
-    virtual Object *Clone() const { return new StaffGrp(*this); }
-    virtual void Reset();
-    virtual std::string GetClassName() const { return "StaffGrp"; }
-    virtual ClassId GetClassId() const { return STAFFGRP; }
+    Object *Clone() const override { return new StaffGrp(*this); }
+    void Reset() override;
+    std::string GetClassName() const override { return "StaffGrp"; }
     ///@}
 
     /**
      * @name Methods for adding allowed content
      */
     ///@{
-    virtual void AddChild(Object *object);
+    bool IsSupportedChild(Object *object) override;
     ///@}
 
     /**
@@ -59,20 +64,58 @@ public:
     void SetDrawingVisibility(VisibilityOptimization drawingIsVisible) { m_drawingVisibility = drawingIsVisible; }
     ///@}
 
+    /**
+     * Get first and last staffDef of the staff group without visibility optimization set to hidden
+     */
+    std::pair<StaffDef *, StaffDef *> GetFirstLastStaffDef();
+
+    /**
+     * Return the maximum staff size in the staffGrp (100 if empty)
+     */
+    int GetMaxStaffSize();
+
+    /**
+     * @name Setter and getter of the group symbol
+     */
+    ///@{
+    void SetGroupSymbol(GrpSym *grpSym);
+    GrpSym *GetGroupSymbol() const { return m_groupSymbol; }
+    ///@}
+
+    /**
+     * @name Methods for checking the presence of label and labelAbbr information and getting them.
+     */
+    ///@{
+    bool HasLabelInfo();
+    bool HasLabelAbbrInfo();
+
+    ///@}
+
+    /**
+     * @name Get a copy of the label and labelAbbr.
+     * These methods create new objects (heap) that will need to be deleted.
+     */
+    ///@{
+    Label *GetLabel();
+    Label *GetLabelCopy();
+    LabelAbbr *GetLabelAbbr();
+    LabelAbbr *GetLabelAbbrCopy();
+    ///@}
+
     //----------//
     // Functors //
     //----------//
 
     /**
-     * See Object::OptimizeScoreDef
+     * See Object::ScoreDefOptimize
      */
-    virtual int OptimizeScoreDefEnd(FunctorParams *functorParams);
+    int ScoreDefOptimizeEnd(FunctorParams *functorParams) override;
 
 protected:
     /**
      * Filter the flat list and keep only StaffDef elements.
      */
-    virtual void FilterList(ListOfObjects *childList);
+    void FilterList(ArrayOfObjects *childList) override;
 
 private:
     //
@@ -86,6 +129,8 @@ private:
      * By default the value is OPTIMIZATION_NONE
      */
     VisibilityOptimization m_drawingVisibility;
+
+    GrpSym *m_groupSymbol;
 };
 
 } // namespace vrv

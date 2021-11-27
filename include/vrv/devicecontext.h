@@ -8,15 +8,8 @@
 #ifndef __VRV_DC_H__
 #define __VRV_DC_H__
 
-#define _USE_MATH_DEFINES // needed by Windows for math constants like "M_PI"
-#include <math.h>
 #include <stack>
 #include <string>
-
-// In case it is not defined before...
-#ifndef M_PI
-#define M_PI (3.14159265358979323846264338327950288)
-#endif
 
 //----------------------------------------------------------------------------
 
@@ -32,6 +25,7 @@ namespace vrv {
 class Glyph;
 class Object;
 class View;
+class Zone;
 
 extern "C" {
 static inline double DegToRad(double deg)
@@ -67,16 +61,29 @@ public:
     ///@{
     DeviceContext()
     {
+        m_classId = DEVICE_CONTEXT;
         m_isDeactivatedX = false;
         m_isDeactivatedY = false;
         m_width = 0;
         m_height = 0;
+        m_contentHeight = 0;
+        m_userScaleX = 1.0;
+        m_userScaleY = 1.0;
+    }
+    DeviceContext(ClassId classId)
+    {
+        m_classId = classId;
+        m_isDeactivatedX = false;
+        m_isDeactivatedY = false;
+        m_width = 0;
+        m_height = 0;
+        m_contentHeight = 0;
         m_userScaleX = 1.0;
         m_userScaleY = 1.0;
     }
     virtual ~DeviceContext(){};
-    virtual ClassId GetClassId() const;
-    bool Is(ClassId classId) const { return (this->GetClassId() == classId); }
+    ClassId GetClassId() const { return m_classId; }
+    bool Is(ClassId classId) const { return (m_classId == classId); }
     ///@}
 
     /**
@@ -86,13 +93,15 @@ public:
     ///@{
     void SetWidth(int width) { m_width = width; }
     void SetHeight(int height) { m_height = height; }
+    void SetContentHeight(int height) { m_contentHeight = height; }
     void SetUserScale(double scaleX, double scaleY)
     {
         m_userScaleX = scaleX;
         m_userScaleY = scaleY;
     }
-    int GetWidth() { return m_width; }
-    int GetHeight() { return m_height; }
+    int GetWidth() const { return m_width; }
+    int GetHeight() const { return m_height; }
+    int GetContentHeight() const { return m_contentHeight; }
     double GetUserScaleX() { return m_userScaleX; }
     double GetUserScaleY() { return m_userScaleY; }
     ///@}
@@ -103,7 +112,7 @@ public:
      */
     ///@{
     void SetBrush(int colour, int opacity);
-    void SetPen(int colour, int width, int opacity, int dashLength = 0);
+    void SetPen(int colour, int width, int opacity, int dashLength = 0, int lineCap = 0);
     void SetFont(FontInfo *font);
     void ResetBrush();
     void ResetPen();
@@ -142,7 +151,9 @@ public:
      * @name Drawing methods
      */
     ///@{
-    virtual void DrawComplexBezierPath(Point bezier1[4], Point bezier2[4]) = 0;
+    virtual void DrawQuadBezierPath(Point bezier[3]) = 0;
+    virtual void DrawCubicBezierPath(Point bezier[4]) = 0;
+    virtual void DrawCubicBezierPathFilled(Point bezier1[4], Point bezier2[4]) = 0;
     virtual void DrawCircle(int x, int y, int radius) = 0;
     virtual void DrawEllipse(int x, int y, int width, int height) = 0;
     virtual void DrawEllipticArc(int x, int y, int width, int height, double start, double end) = 0;
@@ -151,8 +162,9 @@ public:
         = 0;
     virtual void DrawRectangle(int x, int y, int width, int height) = 0;
     virtual void DrawRotatedText(const std::string &text, int x, int y, double angle) = 0;
-    virtual void DrawRoundedRectangle(int x, int y, int width, int height, double radius) = 0;
-    virtual void DrawText(const std::string &text, const std::wstring wtext = L"", int x = VRV_UNSET, int y = VRV_UNSET)
+    virtual void DrawRoundedRectangle(int x, int y, int width, int height, int radius) = 0;
+    virtual void DrawText(const std::string &text, const std::wstring &wtext = L"", int x = VRV_UNSET,
+        int y = VRV_UNSET, int width = VRV_UNSET, int height = VRV_UNSET)
         = 0;
     virtual void DrawMusicText(const std::wstring &text, int x, int y, bool setSmuflGlyph = false) = 0;
     virtual void DrawSpline(int n, Point points[]) = 0;
@@ -176,10 +188,13 @@ public:
     virtual void EndText() = 0;
 
     /**
-     * Move a text to the specified position, for example when starting a new line.
-     * This method should be called only between a StartText and EndText call.
+     * @name Move a text to the specified position, for example when starting a new line.
+     * These methods should be called only between a StartText and EndText call.
      */
+    ///@{
     virtual void MoveTextTo(int x, int y, data_HORIZONTALALIGNMENT alignment) = 0;
+    virtual void MoveTextVerticallyTo(int y) = 0;
+    ///@}
 
     /**
      * @name Temporarily deactivate a graphic
@@ -201,7 +216,9 @@ public:
      * For example, the method can be used for grouping shapes in <g></g> in SVG
      */
     ///@{
-    virtual void StartGraphic(Object *object, std::string gClass, std::string gId) = 0;
+    virtual void StartGraphic(
+        Object *object, std::string gClass, std::string gId, bool primary = true, bool preprend = false)
+        = 0;
     virtual void EndGraphic(Object *object, View *view) = 0;
     ///@}
 
@@ -251,9 +268,6 @@ public:
     virtual void EndPage() = 0;
     ///@}
 
-    /** Colour conversion method **/
-    static int RGB2Int(char red, char green, char blue) { return (red << 16 | green << 8 | blue); }
-
     /**
      * @name Method for adding description element
      */
@@ -267,6 +281,13 @@ public:
      * Global styling is false by default.
      */
     virtual bool UseGlobalStyling() { return false; }
+
+    //----------------//
+    // Static methods //
+    //----------------//
+
+    /** Colour conversion method **/
+    static int RGB2Int(char red, char green, char blue) { return (red << 16 | green << 8 | blue); }
 
 private:
     void AddGlyphToTextExtend(Glyph *glyph, TextExtend *extend);
@@ -282,10 +303,18 @@ protected:
     bool m_isDeactivatedX;
     bool m_isDeactivatedY;
 
+    Zone *m_facsimile = NULL;
+
 private:
+    /** The class id representing the actual (derived) class */
+    ClassId m_classId;
+
     /** stores the width and height of the device context */
     int m_width;
     int m_height;
+
+    /** stores the height of graphic content */
+    int m_contentHeight;
 
     /** stores the scale as requested by the used */
     double m_userScaleX;

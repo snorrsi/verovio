@@ -16,11 +16,12 @@
 
 namespace vrv {
 
-class BoundaryEnd;
+class SystemElementEnd;
 class DeviceContext;
 class Ending;
 class Measure;
 class ScoreDef;
+class Slur;
 class Staff;
 
 //----------------------------------------------------------------------------
@@ -41,24 +42,23 @@ public:
     ///@{
     System();
     virtual ~System();
-    virtual void Reset();
-    virtual std::string GetClassName() const { return "System"; }
-    virtual ClassId GetClassId() const { return SYSTEM; }
+    void Reset() override;
+    std::string GetClassName() const override { return "System"; }
     ///@}
 
     /**
      * @name Methods for adding allowed content
      */
     ///@{
-    virtual void AddChild(Object *object);
+    bool IsSupportedChild(Object *object) override;
     ///@}
 
     /**
      * @name Get the X and Y drawing position
      */
     ///@{
-    virtual int GetDrawingX() const;
-    virtual int GetDrawingY() const;
+    int GetDrawingX() const override;
+    int GetDrawingY() const override;
     ///@}
 
     /**
@@ -75,7 +75,7 @@ public:
      * @name Set and get the labels drawing width (normal and abbreviated)
      */
     ///@{
-    int GetDrawingLabelsWidth() const { return m_drawingLabelsWidth; }
+    int GetDrawingLabelsWidth() const;
     void SetDrawingLabelsWidth(int width);
     int GetDrawingAbbrLabelsWidth() const { return m_drawingAbbrLabelsWidth; }
     void SetDrawingAbbrLabelsWidth(int width);
@@ -85,6 +85,11 @@ public:
      * Return the height of the system
      */
     int GetHeight() const;
+
+    /**
+     * Return the minimus system spacing
+     */
+    int GetMinimumSystemSpacing(const Doc *doc) const;
 
     /**
      * Return the index position of the system in its page parent
@@ -109,6 +114,11 @@ public:
     bool HasMixedDrawingStemDir(LayerElement *start, LayerElement *end);
 
     /**
+     * Get preferred curve direction based on the starting and ending point of the slur
+     */
+    curvature_CURVEDIR GetPreferredCurveDirection(LayerElement *start, LayerElement *end, Slur *slur);
+
+    /**
      * @name Setter and getter of the drawing visible flag
      */
     ///@{
@@ -116,113 +126,182 @@ public:
     void IsDrawingOptimized(bool drawingIsOptimized) { m_drawingIsOptimized = drawingIsOptimized; }
     ///@}
 
+    /**
+     * Add an object to the drawing list but only if necessary.
+     * Check types but also links (dynam, dir) and extensions (trill).
+     */
+    void AddToDrawingListIfNeccessary(Object *object);
+
+    /**
+     * @name Check if the system is the first or last in page or of an mdiv by looking at the next sibling
+     */
+    ///@{
+    bool IsFirstInPage();
+    bool IsLastInPage();
+    bool IsFirstOfMdiv();
+    bool IsLastOfMdiv();
+    ///@}
+
+    /**
+     * Convert mensural MEI into cast-off (measure) segments looking at the barLine objects.
+     * Segment positions occur where a barLine is set on all staves.
+     */
+    void ConvertToCastOffMensuralSystem(Doc *doc, System *targetSystem);
+
+    /**
+     * Reverse of ConvertToCastOffMensural()
+     */
+    void ConvertToUnCastOffMensuralSystem();
+
     //----------//
     // Functors //
     //----------//
 
     /**
-     * See Object::UnsetCurrentScoreDef
+     * See Object::UnscoreDefSetCurrent
      */
-    virtual int UnsetCurrentScoreDef(FunctorParams *functorParams);
+    int ScoreDefUnsetCurrent(FunctorParams *functorParams) override;
 
     /**
-     * See Object::OptimizeScoreDef
+     * @name See Object::ScoreDefOptimize
      */
     ///@{
-    virtual int OptimizeScoreDef(FunctorParams *functorParams);
-    virtual int OptimizeScoreDefEnd(FunctorParams *functorParams);
+    int ScoreDefOptimize(FunctorParams *functorParams) override;
+    int ScoreDefOptimizeEnd(FunctorParams *functorParams) override;
     ///@}
+
+    /**
+     * See Object::ScoreDefSetGrpSym
+     */
+    int ScoreDefSetGrpSym(FunctorParams *functorParams) override;
 
     /**
      * See Object::ResetHorizontalAlignment
      */
-    virtual int ResetHorizontalAlignment(FunctorParams *functorParams);
+    int ResetHorizontalAlignment(FunctorParams *functorParams) override;
 
     /**
      * See Object::ResetVerticalAlignment
      */
-    virtual int ResetVerticalAlignment(FunctorParams *functorParams);
+    int ResetVerticalAlignment(FunctorParams *functorParams) override;
 
     /**
      * See Object::ApplyPPUFactor
      */
-    virtual int ApplyPPUFactor(FunctorParams *functorParams);
+    int ApplyPPUFactor(FunctorParams *functorParams) override;
 
     /**
      * See Object::AlignHorizontally
      */
-    virtual int AlignHorizontally(FunctorParams *functorParams);
+    int AlignHorizontally(FunctorParams *functorParams) override;
 
     /**
-     * See Object::AdjustXOverflow
+     * @name See Object::AdjustXOverflow
      */
     ///@{
-    virtual int AdjustXOverflow(FunctorParams *functorParams);
-    virtual int AdjustXOverflowEnd(FunctorParams *functorParams);
-    ///@}
-    
-    
-    /**
-     * See Object::AdjustSylSpacing
-     */
-    ///@{
-    virtual int AdjustSylSpacing(FunctorParams *functorParams);
-    virtual int AdjustSylSpacingEnd(FunctorParams *functorParams);
+    int AdjustXOverflow(FunctorParams *functorParams) override;
+    int AdjustXOverflowEnd(FunctorParams *functorParams) override;
     ///@}
 
     /**
-     * See Object::AlignVertically
+     * @name See Object::AdjustHarmGrpsSpacing
      */
     ///@{
-    virtual int AlignVertically(FunctorParams *functorParams);
-    virtual int AlignVerticallyEnd(FunctorParams *functorParams);
+    int AdjustHarmGrpsSpacing(FunctorParams *functorParams) override;
+    int AdjustHarmGrpsSpacingEnd(FunctorParams *functorParams) override;
+    ///@}
+
+    /**
+     * @name See Object::AdjustSylSpacing
+     */
+    ///@{
+    int AdjustSylSpacing(FunctorParams *functorParams) override;
+    int AdjustSylSpacingEnd(FunctorParams *functorParams) override;
+    ///@}
+
+    /**
+     * See Object::AdjustTempo
+     */
+    int AdjustTempo(FunctorParams *functorParams) override;
+
+    /**
+     * @name See Object::AlignVertically
+     */
+    ///@{
+    int AlignVertically(FunctorParams *functorParams) override;
+    int AlignVerticallyEnd(FunctorParams *functorParams) override;
     ///@}
 
     /**
      * See Object::AdjustYPos
      */
-    virtual int AdjustYPos(FunctorParams *functorParams);
+    int AdjustYPos(FunctorParams *functorParams) override;
 
     /**
      * See Object::AlignSystems
      */
-    virtual int AlignSystems(FunctorParams *functorParams);
+    int AlignSystems(FunctorParams *functorParams) override;
 
     /**
-     * See Object::AlignMeasures
+     * @name See Object::AlignMeasures
      */
-    virtual int AlignMeasures(FunctorParams *functorParams);
-    virtual int AlignMeasuresEnd(FunctorParams *functorParams);
+    ///@{
+    int AlignMeasures(FunctorParams *functorParams) override;
+    int AlignMeasuresEnd(FunctorParams *functorParams) override;
+    ///@}
 
     /**
      * See Object::JustifyX
      */
-    virtual int JustifyX(FunctorParams *functorParams);
+    int JustifyX(FunctorParams *functorParams) override;
+
+    /**
+     * See Object::JustifyY
+     */
+    int JustifyY(FunctorParams *functorParams) override;
 
     /**
      * See Object::AdjustStaffOverlap
      */
-    virtual int AdjustStaffOverlap(FunctorParams *functorParams);
+    int AdjustStaffOverlap(FunctorParams *functorParams) override;
 
     /**
-     * See Object::AdjustFloatingPostioners
+     * See Object::AdjustFloatingPositioners
      */
-    virtual int AdjustFloatingPostioners(FunctorParams *functorParams);
+    int AdjustFloatingPositioners(FunctorParams *functorParams) override;
+
+    /**
+     * See Object::AdjustFloatingPositionersBetween
+     */
+    int AdjustFloatingPositionersBetween(FunctorParams *functorParams) override;
+
+    /**
+     * See Object::AdjustSlurs
+     */
+    int AdjustSlurs(FunctorParams *functorParams) override;
 
     /**
      * See Object::CastOffPages
      */
-    virtual int CastOffPages(FunctorParams *functorParams);
+    int CastOffPages(FunctorParams *functorParams) override;
+
+    /**
+     * @name See Object::CastOffSystems
+     */
+    ///@{
+    int CastOffSystems(FunctorParams *functorParams) override;
+    int CastOffSystemsEnd(FunctorParams *functorParams) override;
+    ///@}
+
+    /**
+     * See Object::CastOffEncoding
+     */
+    int CastOffEncoding(FunctorParams *functorParams) override;
 
     /**
      * See Object::UnCastOff
      */
-    virtual int UnCastOff(FunctorParams *functorParams);
-
-    /**
-     * See Object::CastOffSystemsEnd
-     */
-    virtual int CastOffSystemsEnd(FunctorParams *functorParams);
+    int UnCastOff(FunctorParams *functorParams) override;
 
 public:
     SystemAligner m_systemAligner;
@@ -243,11 +322,9 @@ public:
      */
     int m_xAbs;
     /**
-     * The width used by the labels at the left of the system.
+     * The width used by the abbreviated labels at the left of the system.
      * It is used internally when calculating the layout and it is not stored in the file.
      */
-    int m_drawingLabelsWidth;
-    /** The width used by the abbreviated labels */
     int m_drawingAbbrLabelsWidth;
     /**
      * @name The total width of the system.

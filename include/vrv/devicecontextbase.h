@@ -17,6 +17,9 @@
 
 namespace vrv {
 
+class Doc;
+
+#define AxNONE -1
 #define AxWHITE 255 << 16 | 255 << 8 | 255
 #define AxBLACK 0
 #define AxRED 255 << 16
@@ -24,6 +27,8 @@ namespace vrv {
 #define AxGREEN 255 << 8
 #define AxCYAN 255 << 8 | 255
 #define AxLIGHT_GREY 127 << 16 | 127 << 8 | 127
+#undef max
+#undef min
 
 /*  Polygon filling mode */
 enum { AxODDEVEN_RULE = 1, AxWINDING_RULE };
@@ -50,9 +55,9 @@ enum {
 
 class Pen {
 public:
-    Pen() : m_penColour(0), m_penWidth(0), m_dashLength(0), m_penOpacity(0.0) {}
-    Pen(int colour, int width, float opacity, int dashLength)
-        : m_penColour(colour), m_penWidth(width), m_dashLength(dashLength), m_penOpacity(opacity)
+    Pen() : m_penColour(0), m_penWidth(0), m_dashLength(0), m_lineCap(0), m_penOpacity(0.0) {}
+    Pen(int colour, int width, float opacity, int dashLength, int lineCap)
+        : m_penColour(colour), m_penWidth(width), m_dashLength(dashLength), m_lineCap(lineCap), m_penOpacity(opacity)
     {
     }
 
@@ -62,11 +67,13 @@ public:
     void SetWidth(int width) { m_penWidth = width; }
     int GetDashLength() const { return m_dashLength; }
     void SetDashLength(int dashLength) { m_dashLength = dashLength; }
+    int GetLineCap() const { return m_lineCap; }
+    void SetLineCap(int lineCap) { m_lineCap = lineCap; }
     float GetOpacity() const { return m_penOpacity; }
     void SetOpacity(float opacity) { m_penOpacity = opacity; }
 
 private:
-    int m_penColour, m_penWidth, m_dashLength;
+    int m_penColour, m_penWidth, m_dashLength, m_lineCap;
     float m_penOpacity;
 };
 
@@ -102,27 +109,33 @@ public:
         m_style = FONTSTYLE_NONE;
         m_weight = FONTWEIGHT_NONE;
         m_underlined = false;
+        m_supSubScript = false;
         m_faceName.clear();
         m_encoding = 0; // was wxFONTENCODING_DEFAULT;
+        m_widthToHeightRatio = 1.0;
     }
     virtual ~FontInfo(){};
 
     // accessors and modifiers for the font elements
     int GetPointSize() { return m_pointSize; }
-    int GetStyle() { return m_style; }
-    int GetWeight() { return m_weight; }
+    data_FONTSTYLE GetStyle() { return m_style; }
+    data_FONTWEIGHT GetWeight() { return m_weight; }
     bool GetUnderlined() { return m_underlined; }
+    bool GetSupSubScript() { return m_supSubScript; }
     std::string GetFaceName() { return m_faceName; }
     int GetFamily() { return m_family; }
     int GetEncoding() { return m_encoding; }
+    float GetWidthToHeightRatio() { return m_widthToHeightRatio; }
 
     void SetPointSize(int pointSize) { m_pointSize = pointSize; }
     void SetStyle(data_FONTSTYLE style) { m_style = style; }
     void SetWeight(data_FONTWEIGHT weight) { m_weight = weight; }
     void SetUnderlined(bool underlined) { m_underlined = underlined; }
+    void SetSupSubScript(bool supSubScript) { m_supSubScript = supSubScript; }
     void SetFaceName(const char *faceName) { m_faceName = faceName; }
     void SetFamily(int family) { m_family = family; }
     void SetEncoding(int encoding) { m_encoding = encoding; }
+    void SetWidthToHeightRatio(float ratio) { m_widthToHeightRatio = ratio; }
 
 private:
     int m_pointSize;
@@ -130,8 +143,10 @@ private:
     data_FONTSTYLE m_style;
     data_FONTWEIGHT m_weight;
     bool m_underlined;
+    bool m_supSubScript;
     std::string m_faceName;
     int m_encoding;
+    float m_widthToHeightRatio;
 };
 
 // ---------------------------------------------------------------------------
@@ -173,6 +188,90 @@ public:
     }
 
     Point operator-() const { return Point(-x, -y); }
+
+    Point min(const Point &p) const
+    {
+        int x = std::min(this->x, p.x);
+        int y = std::min(this->y, p.y);
+        return Point(x, y);
+    }
+
+    Point max(const Point &p) const
+    {
+        int x = std::max(this->x, p.x);
+        int y = std::max(this->y, p.y);
+        return Point(x, y);
+    }
+};
+
+// ---------------------------------------------------------------------------
+// BezierCurve
+// ---------------------------------------------------------------------------
+
+/**
+ * Simple class for representing bezier cCurve
+ */
+
+class BezierCurve {
+public:
+    Point p1; // start point
+    Point c1, c2; // control points
+    Point p2; // end point
+
+    // no copy ctor or assignment operator - the defaults are ok
+
+    BezierCurve() {}
+    BezierCurve(const Point &p1, const Point &c1, const Point &c2, const Point &p2) : p1(p1), c1(c1), c2(c2), p2(p2) {}
+
+    // Helper to rotate all points within bezier curve around @rotationPoint by @angle
+    void Rotate(float angle, const Point &rotationPoint);
+
+    /**
+     * @name Getter/setter for control point offset (as well as method to calculate it from options)
+     */
+    ///@{
+    void SetControlPointOffset(int controlPointOffset)
+    {
+        m_leftControlPointOffset = m_rightControlPointOffset = controlPointOffset;
+    };
+    void SetLeftControlPointOffset(int height) { m_leftControlPointOffset = height; }
+    void SetRightControlPointOffset(int height) { m_rightControlPointOffset = height; }
+    int GetLeftControlPointOffset() const { return m_leftControlPointOffset; }
+    int GetRightControlPointOffset() const { return m_rightControlPointOffset; }
+    ///@}
+
+    /**
+     * @name Getter/setter for the height of control points (left and right)
+     */
+    ///@{
+    void SetControlHeight(int height) { m_leftControlHeight = m_rightControlHeight = height; }
+    void SetLeftControlHeight(int height) { m_leftControlHeight = height; }
+    void SetRightControlHeight(int height) { m_rightControlHeight = height; }
+    int GetLeftControlHeight() const { return m_leftControlHeight; }
+    int GetRightControlHeight() const { return m_rightControlHeight; }
+    ///@}
+
+    /**
+     * @name Initialize control point height and offset from end point positions
+     */
+    void CalcInitialControlPointParams(Doc *doc, float angle, int staffSize);
+
+    /**
+     * Calculate control point offset and height from points or vice versa
+     */
+    ///@{
+    void UpdateControlPointParams(curvature_CURVEDIR dir);
+    void UpdateControlPoints(curvature_CURVEDIR dir);
+    ///@}
+
+private:
+    // Control point X-axis offset for both start/end points
+    int m_leftControlPointOffset = 0;
+    int m_rightControlPointOffset = 0;
+    int m_leftControlHeight = 0;
+    int m_rightControlHeight = 0;
+
+    // no copy ctor or assignment operator - the defaults are ok
 };
 
 // ---------------------------------------------------------------------------

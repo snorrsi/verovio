@@ -34,7 +34,24 @@ class Neume;
 // Note
 //----------------------------------------------------------------------------
 
-enum NeumeGroup { NEUME_ERROR = 0, PUNCTUM, CLIVIS, PES, CLIMACUS, PORRECTUS, SCANDICUS, TORCULUS };
+enum NeumeGroup {
+    NEUME_ERROR = 0,
+    PUNCTUM,
+    CLIVIS,
+    PES,
+    PRESSUS,
+    CLIMACUS,
+    PORRECTUS,
+    SCANDICUS,
+    TORCULUS,
+    SCANDICUS_FLEXUS,
+    PORRECTUS_FLEXUS,
+    TORCULUS_RESUPINUS,
+    CLIMACUS_RESUPINUS,
+    PES_SUBPUNCTIS,
+    PORRECTUS_SUBPUNCTIS,
+    SCANDICUS_SUBPUNCTIS
+};
 
 /**
  * This class models the MEI <neume> element.
@@ -48,34 +65,43 @@ public:
      */
     ///@{
     Neume();
-
     virtual ~Neume();
-
-    virtual void Reset();
-
-    virtual std::string GetClassName() const { return "Neume"; }
-
-    virtual ClassId GetClassId() const { return NEUME; }
+    void Reset() override;
+    Object *Clone() const override { return new Neume(*this); }
+    std::string GetClassName() const override { return "Neume"; }
     ///@}
 
     /**
      * Add an element (a note or a rest) to a syllable.
      * Only syl or neume will be added.
      */
-    virtual void AddChild(Object *object);
+    bool IsSupportedChild(Object *object) override;
 
-    virtual int GetPosition(LayerElement *element);
-    virtual bool IsLastInNeume(LayerElement *element);
+    bool IsLastInNeume(LayerElement *element);
 
     bool GenerateChildMelodic();
 
+    NeumeGroup GetNeumeGroup();
+
+    std::vector<int> GetPitchDifferences();
+
+    PitchInterface *GetHighestPitch();
+    PitchInterface *GetLowestPitch();
+
 private:
-    //
+    int GetPosition(LayerElement *element);
+
 public:
+    //----------------//
+    // Static members //
+    //----------------//
+
     /**
      * String keys come from the contours of neume groupings as defined in MEI4
      */
-    static std::map<std::string, NeumeGroup> s_neumes;
+    static const std::map<std::string, NeumeGroup> s_neumes;
+
+    static std::string NeumeGroupToString(NeumeGroup group);
 
 private:
 };

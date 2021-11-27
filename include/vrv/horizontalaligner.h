@@ -63,7 +63,7 @@ enum AlignmentType {
 //----------------------------------------------------------------------------
 
 /**
- * This class stores an alignement position elements will point to
+ * This class stores an alignment position elements will point to
  */
 class Alignment : public Object {
 public:
@@ -75,8 +75,7 @@ public:
     Alignment();
     Alignment(double time, AlignmentType type = ALIGNMENT_DEFAULT);
     virtual ~Alignment();
-    virtual void Reset();
-    virtual ClassId GetClassId() const { return ALIGNMENT; }
+    void Reset() override;
     ///@}
 
     /**
@@ -87,7 +86,7 @@ public:
     /**
      * Override the method of adding AlignmentReference children
      */
-    virtual void AddChild(Object *object);
+    bool IsSupportedChild(Object *object) override;
 
     /**
      * @name Set and get the xRel value of the alignment
@@ -123,14 +122,16 @@ public:
     /**
      * Check if the element is of on of the types
      */
-    bool IsOfType(const std::vector<AlignmentType> &types);
+    bool IsOfType(const std::vector<AlignmentType> &types) const;
 
     /**
      * Retrive the minimum left and maximum right position for the objects in an alignment.
      * Returns (-)VRV_UNSET in nothing for the staff specified.
      * Uses Object::GetAlignmentLeftRight
      */
-    void GetLeftRight(int staffN, int &minLeft, int &maxRight);
+    void GetLeftRight(
+        const std::vector<int> &staffNs, int &minLeft, int &maxRight, const std::vector<ClassId> &m_excludes = {});
+    void GetLeftRight(int staffN, int &minLeft, int &maxRight, const std::vector<ClassId> &m_excludes = {});
 
     /**
      * Returns the GraceAligner for the Alignment.
@@ -144,10 +145,20 @@ public:
     bool HasGraceAligner(int id) const;
 
     /**
+     * Returns true for Alignment for which we want to do bounding box alignment
+     */
+    bool PerfomBoundingBoxAlignment() const;
+
+    /**
      * Return the AlignmentReference holding the element.
      * If staffN is provided, uses the AlignmentReference->GetN() to accelerate the search.
      */
     AlignmentReference *GetReferenceWithElement(LayerElement *element, int staffN = VRV_UNSET);
+
+    /**
+     * Return pair of max and min Y value within alignment. Elements will be counted by alignment references.
+     */
+    std::pair<int, int> GetAlignmentTopBottom();
 
     /**
      * Add an accidental to the accidSpace of the AlignmentReference holding it.
@@ -174,9 +185,19 @@ public:
         double intervalTime, int maxActualDur, double spacingLinear, double spacingNonLinear);
 
     /**
+     * Return true if there is vertical overlap with accidentals from another alignment for specific staffN
+     */
+    bool HasAccidVerticalOverlap(Alignment *otherAlignment, int staffN);
+
+    /**
      * Return true if the alignment contains at least one reference with staffN
      */
     bool HasAlignmentReference(int staffN);
+
+    /**
+     * Return true if the alignment contains only references to timestamp attributes.
+     */
+    bool HasTimestampOnly();
 
     //----------//
     // Functors //
@@ -186,39 +207,44 @@ public:
      * Set the position of the Alignment.
      * Looks at the time different with the previous Alignment.
      */
-    virtual int SetAlignmentXPos(FunctorParams *functorParams);
+    int SetAlignmentXPos(FunctorParams *functorParams) override;
 
     /**
      * Justify the X positions
      * Special case of functor redirected from Measure.
      */
-    virtual int JustifyX(FunctorParams *functorParams);
+    int JustifyX(FunctorParams *functorParams) override;
 
     /**
      * See Object::AdjustArpeg
      */
-    virtual int AdjustArpeg(FunctorParams *functorParams);
+    int AdjustArpeg(FunctorParams *functorParams) override;
 
     /**
      * See Object::AdjustGraceXPos
      */
     ///@{
-    virtual int AdjustGraceXPos(FunctorParams *functorParams);
-    virtual int AdjustGraceXPosEnd(FunctorParams *functorParams);
+    int AdjustGraceXPos(FunctorParams *functorParams) override;
+    int AdjustGraceXPosEnd(FunctorParams *functorParams) override;
     ///@}
 
     /**
      * See Object::AdjustXPos
      */
     ///@{
-    virtual int AdjustXPos(FunctorParams *functorParams);
-    virtual int AdjustXPosEnd(FunctorParams *functorParams);
+    int AdjustXPos(FunctorParams *functorParams) override;
+    int AdjustXPosEnd(FunctorParams *functorParams) override;
     ///@}
 
     /**
      * See Object::AjustAccidX
      */
-    virtual int AdjustAccidX(FunctorParams *functorParams);
+    int AdjustAccidX(FunctorParams *functorParams) override;
+
+    /**
+     * See Object::AdjustDotsEnd
+     */
+    int AdjustDotsEnd(FunctorParams *functorParams) override;
 
 private:
     /**
@@ -263,7 +289,7 @@ private:
 
 /**
  * This class stores a references of LayerElements for a staff.
- * The staff identification (@n) is given by the attCommon and takes into accound
+ * The staff identification (@n) is given by the attCommon and takes into account
  * cross-staff situations.
  * Its children of the alignment are references.
  */
@@ -277,14 +303,18 @@ public:
     AlignmentReference();
     AlignmentReference(int staffN);
     virtual ~AlignmentReference();
-    virtual void Reset();
-    virtual ClassId GetClassId() const { return ALIGNMENT_REFERENCE; }
+    void Reset() override;
     ///@}
 
     /**
      * Override the method of adding AlignmentReference children
      */
-    virtual void AddChild(Object *object);
+    bool IsSupportedChild(Object *object) override;
+
+    /**
+     * Overwritten method for AlignmentReference children
+     */
+    void AddChild(Object *object) override;
 
     /**
      * Add an accidental to the accidSpace of the AlignmentReference.
@@ -294,12 +324,22 @@ public:
     /**
      * See Object::AjustAccidX
      */
-    void AdjustAccidWithAccidSpace(Accid *accid, Doc *doc, int staffSize);
+    void AdjustAccidWithAccidSpace(Accid *accid, Doc *doc, int staffSize, std::vector<Accid *> &adjustedAccids);
+
+    /**
+     * Return true if one of objects overlaps with accidentals from current reference (i.e. if there are accidentals)
+     */
+    bool HasAccidVerticalOverlap(const ArrayOfObjects *objects);
 
     /**
      * Return true if the reference has elements from multiple layers.
      */
     bool HasMultipleLayer() const { return (m_layerCount > 1); }
+
+    /**
+     * Return true if the reference has elements from cross-staff.
+     */
+    bool HasCrossStaffElements();
 
     //----------//
     // Functors //
@@ -308,22 +348,23 @@ public:
     /**
      * See Object::AdjustLayers
      */
-    virtual int AdjustLayers(FunctorParams *functorParams);
+    int AdjustLayers(FunctorParams *functorParams) override;
+    int AdjustLayersEnd(FunctorParams *functorParams) override;
 
     /**
      * See Object::AdjustGraceXPos
      */
-    virtual int AdjustGraceXPos(FunctorParams *functorParams);
+    int AdjustGraceXPos(FunctorParams *functorParams) override;
 
     /**
      * See Object::AjustAccidX
      */
-    virtual int AdjustAccidX(FunctorParams *functorParams);
+    int AdjustAccidX(FunctorParams *functorParams) override;
 
     /**
-     * See Object::FindSpaceInReferenceAlignments
+     * See Object::UnscoreDefSetCurrent
      */
-    virtual int FindSpaceInReferenceAlignments(FunctorParams *functorParams);
+    int ScoreDefUnsetCurrent(FunctorParams *functorParams) override;
 
 private:
     //
@@ -357,12 +398,17 @@ public:
      * Reset method resets all attribute classes
      */
     ///@(
-    HorizontalAligner();
+    HorizontalAligner(ClassId classId);
     virtual ~HorizontalAligner();
-    virtual void Reset();
+    void Reset() override;
     ///@}
 
-    int GetAlignmentCount() const { return (int)m_children.size(); }
+    /**
+     * Do not copy children for HorizontalAligner
+     */
+    bool CopyChildren() const override { return false; }
+
+    int GetAlignmentCount() const { return (int)GetChildren()->size(); }
 
     //----------//
     // Functors //
@@ -404,8 +450,7 @@ public:
     ///@(
     MeasureAligner();
     virtual ~MeasureAligner();
-    virtual ClassId GetClassId() const { return MEASURE_ALIGNER; }
-    virtual void Reset();
+    void Reset() override;
     ///@}
 
     /**
@@ -432,6 +477,15 @@ public:
      */
     ///@{
     int GetNonJustifiableMargin() const { return m_nonJustifiableLeftMargin; }
+    ///@}
+
+    /**
+     * @name Set and Get the initial tstamp duration.
+     * Setter takes a meter unit parameter.
+     */
+    ///@{
+    void SetInitialTstamp(int meterUnit);
+    double GetInitialTstampDur() const { return m_initialTstampDur; }
     ///@}
 
     /**
@@ -478,13 +532,13 @@ public:
      * Looks at the time different with the previous Alignment.
      * For each MeasureAlignment, we need to reset the previous time position.
      */
-    virtual int SetAlignmentXPos(FunctorParams *functorParams);
+    int SetAlignmentXPos(FunctorParams *functorParams) override;
 
     /**
      * Justify the X positions
      * Special case of functor redirected from Measure.
      */
-    virtual int JustifyX(FunctorParams *functorParams);
+    int JustifyX(FunctorParams *functorParams) override;
 
 private:
     //
@@ -507,6 +561,12 @@ private:
      * Store measure's non-justifiable margin used by the scoreDef attributes.
      */
     int m_nonJustifiableLeftMargin;
+
+    /**
+     * The time duration of the timestamp between 0.0 and 1.0.
+     * This depends on the meter signature in the preceeding scoreDef
+     */
+    double m_initialTstampDur;
 };
 
 //----------------------------------------------------------------------------
@@ -526,8 +586,7 @@ public:
     ///@(
     GraceAligner();
     virtual ~GraceAligner();
-    virtual ClassId GetClassId() const { return GRACE_ALIGNER; }
-    virtual void Reset();
+    void Reset() override;
     ///@}
 
     /**
@@ -607,12 +666,11 @@ public:
     // constructors and destructors
     TimestampAligner();
     virtual ~TimestampAligner();
-    virtual ClassId GetClassId() const { return TIMESTAMP_ALIGNER; }
 
     /**
      * Reset the aligner (clear the content)
      */
-    virtual void Reset();
+    void Reset() override;
 
     /**
      * Look for an existing TimestampAttr at a certain time.

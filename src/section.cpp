@@ -30,9 +30,13 @@ namespace vrv {
 // Section
 //----------------------------------------------------------------------------
 
-Section::Section() : SystemElement("section-"), BoundaryStartInterface(), AttNNumberLike()
+static const ClassRegistrar<Section> s_factory("section", SECTION);
+
+Section::Section()
+    : SystemElement(SECTION, "section-"), SystemElementStartInterface(), AttNNumberLike(), AttSectionVis()
 {
     RegisterAttClass(ATT_NNUMBERLIKE);
+    RegisterAttClass(ATT_SECTIONVIS);
 
     Reset();
 }
@@ -42,11 +46,12 @@ Section::~Section() {}
 void Section::Reset()
 {
     SystemElement::Reset();
-    BoundaryStartInterface::Reset();
+    SystemElementStartInterface::Reset();
     ResetNNumberLike();
+    ResetSectionVis();
 }
 
-void Section::AddChild(Object *child)
+bool Section::IsSupportedChild(Object *child)
 {
     if (child->Is(MEASURE)) {
         assert(dynamic_cast<Measure *>(child));
@@ -61,13 +66,9 @@ void Section::AddChild(Object *child)
         assert(dynamic_cast<EditorialElement *>(child));
     }
     else {
-        LogError("Adding '%s' to a '%s'", child->GetClassName().c_str(), this->GetClassName().c_str());
-        assert(false);
+        return false;
     }
-
-    child->SetParent(this);
-    m_children.push_back(child);
-    Modify();
+    return true;
 }
 
 //----------------------------------------------------------------------------
@@ -76,27 +77,28 @@ void Section::AddChild(Object *child)
 
 int Section::ConvertToPageBased(FunctorParams *functorParams)
 {
-    ConvertToPageBasedParams *params = dynamic_cast<ConvertToPageBasedParams *>(functorParams);
+    ConvertToPageBasedParams *params = vrv_params_cast<ConvertToPageBasedParams *>(functorParams);
     assert(params);
 
-    this->MoveItselfTo(params->m_pageBasedSystem);
+    assert(params->m_currentSystem);
+    this->MoveItselfTo(params->m_currentSystem);
 
     return FUNCTOR_CONTINUE;
 }
 
 int Section::ConvertToPageBasedEnd(FunctorParams *functorParams)
 {
-    ConvertToPageBasedParams *params = dynamic_cast<ConvertToPageBasedParams *>(functorParams);
+    ConvertToPageBasedParams *params = vrv_params_cast<ConvertToPageBasedParams *>(functorParams);
     assert(params);
 
-    ConvertToPageBasedBoundary(this, params->m_pageBasedSystem);
+    ConvertToPageBasedBoundary(this, params->m_currentSystem);
 
     return FUNCTOR_CONTINUE;
 }
 
 int Section::ConvertToUnCastOffMensural(FunctorParams *functorParams)
 {
-    ConvertToUnCastOffMensuralParams *params = dynamic_cast<ConvertToUnCastOffMensuralParams *>(functorParams);
+    ConvertToUnCastOffMensuralParams *params = vrv_params_cast<ConvertToUnCastOffMensuralParams *>(functorParams);
     assert(params);
 
     params->m_contentMeasure = NULL;
@@ -107,8 +109,8 @@ int Section::ConvertToUnCastOffMensural(FunctorParams *functorParams)
 
 int Section::PrepareBoundaries(FunctorParams *functorParams)
 {
-    if (this->IsBoundary()) {
-        this->BoundaryStartInterface::InterfacePrepareBoundaries(functorParams);
+    if (this->IsSystemBoundary()) {
+        this->SystemElementStartInterface::InterfacePrepareBoundaries(functorParams);
     }
 
     return FUNCTOR_CONTINUE;
@@ -118,8 +120,8 @@ int Section::ResetDrawing(FunctorParams *functorParams)
 {
     FloatingObject::ResetDrawing(functorParams);
 
-    if (this->IsBoundary()) {
-        this->BoundaryStartInterface::InterfaceResetDrawing(functorParams);
+    if (this->IsSystemBoundary()) {
+        this->SystemElementStartInterface::InterfaceResetDrawing(functorParams);
     }
 
     return FUNCTOR_CONTINUE;

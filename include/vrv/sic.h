@@ -26,9 +26,9 @@ public:
     ///@{
     Sic();
     virtual ~Sic();
-    virtual void Reset();
-    virtual std::string GetClassName() const { return "Sic"; }
-    virtual ClassId GetClassId() const { return SIC; }
+    Object *Clone() const override { return new Sic(*this); }
+    void Reset() override;
+    std::string GetClassName() const override { return "Sic"; }
     ///@}
 
 private:

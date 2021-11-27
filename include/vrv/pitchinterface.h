@@ -13,6 +13,7 @@
 
 namespace vrv {
 
+class Clef;
 class Layer;
 
 //----------------------------------------------------------------------------
@@ -32,8 +33,8 @@ public:
     ///@{
     PitchInterface();
     virtual ~PitchInterface();
-    virtual void Reset();
-    virtual InterfaceId IsInterface() { return INTERFACE_PITCH; }
+    void Reset() override;
+    InterfaceId IsInterface() const override { return INTERFACE_PITCH; }
     ///@}
 
     /**
@@ -41,12 +42,6 @@ public:
      * Checks if the LayerElement has a PitchInterface and compares attributes
      */
     bool HasIdenticalPitchInterface(PitchInterface *otherPitchInterface);
-
-    /**
-     * Adjust the pname and the octave for values outside the range.
-     * To be tested
-     */
-    static void AdjustPname(int &pname, int &oct);
 
     /**
      * Shift pname and octave by a certain number of steps.
@@ -60,11 +55,27 @@ public:
     int PitchDifferenceTo(PitchInterface *pi);
 
     /**
+     * adjust the pitch value so that it stays in the same x,y position
+     * given it's new and old clefs
+     */
+    void AdjustPitchForNewClef(Clef *oldClef, Clef *newClef);
+
+    //----------------//
+    // Static methods //
+    //----------------//
+
+    /**
+     * Adjust the pname and the octave for values outside the range.
+     * To be tested
+     */
+    static void AdjustPname(int &pname, int &oct);
+
+    /**
      * Calculate the loc for a note, rest or chord considering its position in the layer.
      * By default for chord takes the top note, but the bottom note otherwise.
      * E.g., return 0 for and C4 with clef C1, -2 with clef G2.
      */
-    static int CalcLoc(LayerElement *element, Layer *layer, bool topChordNote = true);
+    static int CalcLoc(LayerElement *element, Layer *layer, LayerElement *crossStaffElement, bool topChordNote = true);
 
     /**
      * Calculate the loc for a pitch and octave and considerting the clef loc offset.

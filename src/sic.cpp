@@ -21,7 +21,9 @@ namespace vrv {
 // Sic
 //----------------------------------------------------------------------------
 
-Sic::Sic() : EditorialElement("sic-"), AttSource()
+static const ClassRegistrar<Sic> s_factory("sic", SIC);
+
+Sic::Sic() : EditorialElement(SIC, "sic-"), AttSource()
 {
     RegisterAttClass(ATT_SOURCE);
 

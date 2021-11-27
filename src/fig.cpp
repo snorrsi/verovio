@@ -23,7 +23,9 @@ namespace vrv {
 // Fig
 //----------------------------------------------------------------------------
 
-Fig::Fig() : TextElement("fig-"), AreaPosInterface()
+static const ClassRegistrar<Fig> s_factory("fig", FIG);
+
+Fig::Fig() : TextElement(FIG, "fig-"), AreaPosInterface()
 {
     RegisterInterface(AreaPosInterface::GetAttClasses(), AreaPosInterface::IsInterface());
 
@@ -38,19 +40,15 @@ void Fig::Reset()
     AreaPosInterface::Reset();
 }
 
-void Fig::AddChild(Object *child)
+bool Fig::IsSupportedChild(Object *child)
 {
     if (child->Is(SVG)) {
         assert(dynamic_cast<Svg *>(child));
     }
     else {
-        LogError("Adding '%s' to a '%s'", child->GetClassName().c_str(), this->GetClassName().c_str());
-        assert(false);
+        return false;
     }
-
-    child->SetParent(this);
-    m_children.push_back(child);
-    Modify();
+    return true;
 }
 
 //----------------------------------------------------------------------------
@@ -59,10 +57,10 @@ void Fig::AddChild(Object *child)
 
 int Fig::AlignVertically(FunctorParams *functorParams)
 {
-    AlignVerticallyParams *params = dynamic_cast<AlignVerticallyParams *>(functorParams);
+    AlignVerticallyParams *params = vrv_params_cast<AlignVerticallyParams *>(functorParams);
     assert(params);
 
-    Svg *svg = dynamic_cast<Svg *>(this->FindChildByType(SVG));
+    Svg *svg = dynamic_cast<Svg *>(this->FindDescendantByType(SVG));
     int width = (svg) ? svg->GetWidth() : 0;
 
     if (this->GetHalign() == HORIZONTALALIGNMENT_right) {

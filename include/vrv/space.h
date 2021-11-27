@@ -29,26 +29,21 @@ public:
     ///@{
     Space();
     virtual ~Space();
-    virtual void Reset();
-    virtual std::string GetClassName() const { return "Space"; }
-    virtual ClassId GetClassId() const { return SPACE; }
+    Object *Clone() const override { return new Space(*this); }
+    void Reset() override;
+    std::string GetClassName() const override { return "Space"; }
     ///@}
 
     /**
      * @name Getter to interfaces
      */
     ///@{
-    virtual DurationInterface *GetDurationInterface() { return dynamic_cast<DurationInterface *>(this); }
+    DurationInterface *GetDurationInterface() override { return dynamic_cast<DurationInterface *>(this); }
     ///@}
 
     //----------//
     // Functors //
     //----------//
-
-    /**
-     * See Object::FindSpaceInReferenceAlignments
-     */
-    virtual int FindSpaceInReferenceAlignments(FunctorParams *functorParams);
 
 private:
     //

@@ -117,7 +117,7 @@ bool AttExtSym::HasGlyphUri() const
 
 /* include <attglyph.uri> */
 
-bool Att::SetExternalsymbols(Object *element, std::string attrType, std::string attrValue)
+bool Att::SetExternalsymbols(Object *element, const std::string &attrType, const std::string &attrValue)
 {
     if (element->HasAttClass(ATT_EXTSYM)) {
         AttExtSym *att = dynamic_cast<AttExtSym *>(element);
@@ -149,16 +149,16 @@ void Att::GetExternalsymbols(const Object *element, ArrayOfStrAttr *attributes)
         const AttExtSym *att = dynamic_cast<const AttExtSym *>(element);
         assert(att);
         if (att->HasGlyphAuth()) {
-            attributes->push_back(std::make_pair("glyph.auth", att->StrToStr(att->GetGlyphAuth())));
+            attributes->push_back({ "glyph.auth", att->StrToStr(att->GetGlyphAuth()) });
         }
         if (att->HasGlyphName()) {
-            attributes->push_back(std::make_pair("glyph.name", att->StrToStr(att->GetGlyphName())));
+            attributes->push_back({ "glyph.name", att->StrToStr(att->GetGlyphName()) });
         }
         if (att->HasGlyphNum()) {
-            attributes->push_back(std::make_pair("glyph.num", att->HexnumToStr(att->GetGlyphNum())));
+            attributes->push_back({ "glyph.num", att->HexnumToStr(att->GetGlyphNum()) });
         }
         if (att->HasGlyphUri()) {
-            attributes->push_back(std::make_pair("glyph.uri", att->StrToStr(att->GetGlyphUri())));
+            attributes->push_back({ "glyph.uri", att->StrToStr(att->GetGlyphUri()) });
         }
     }
 }

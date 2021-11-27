@@ -22,33 +22,37 @@
 #include "staff.h"
 #include "vrv.h"
 
+//----------------------------------------------------------------------------
+
+#include "MidiFile.h"
+
 namespace vrv {
 
 //----------------------------------------------------------------------------
 // FTrem
 //----------------------------------------------------------------------------
 
-FTrem::FTrem() : LayerElement("ftrem-"), ObjectListInterface(), AttSlashCount(), AttTremMeasured()
+static const ClassRegistrar<FTrem> s_factory("fTrem", FTREM);
+
+FTrem::FTrem() : LayerElement(FTREM, "ftrem-"), BeamDrawingInterface(), AttFTremVis(), AttTremMeasured()
 {
-    RegisterAttClass(ATT_SLASHCOUNT);
+    RegisterAttClass(ATT_FTREMVIS);
     RegisterAttClass(ATT_TREMMEASURED);
 
     Reset();
 }
 
-FTrem::~FTrem()
-{
-    ClearCoords();
-}
+FTrem::~FTrem() {}
 
 void FTrem::Reset()
 {
     LayerElement::Reset();
-    ResetSlashCount();
+    BeamDrawingInterface::Reset();
+    ResetFTremVis();
     ResetTremMeasured();
 }
 
-void FTrem::AddChild(Object *child)
+bool FTrem::IsSupportedChild(Object *child)
 {
     if (child->Is(CHORD)) {
         assert(dynamic_cast<Chord *>(child));
@@ -63,28 +67,31 @@ void FTrem::AddChild(Object *child)
         assert(dynamic_cast<EditorialElement *>(child));
     }
     else {
-        LogError("Adding '%s' to a '%s'", child->GetClassName().c_str(), this->GetClassName().c_str());
-        assert(false);
+        return false;
     }
-
-    child->SetParent(this);
-    m_children.push_back(child);
-    Modify();
+    return true;
 }
 
-void FTrem::FilterList(ListOfObjects *childList)
+const ArrayOfBeamElementCoords *FTrem::GetElementCoords()
 {
-    ListOfObjects::iterator iter = childList->begin();
+    this->GetList(this);
+
+    return &m_beamElementCoords;
+}
+
+void FTrem::FilterList(ArrayOfObjects *childList)
+{
+    ArrayOfObjects::iterator iter = childList->begin();
 
     while (iter != childList->end()) {
         if (!(*iter)->Is(NOTE) && !(*iter)->Is(CHORD)) {
-            // remove anything that is not an LayerElement (e.g. Verse, Syl, etc)
+            // remove anything that is not an LayerElement (e.g. Verse, Syl, etc.)
             iter = childList->erase(iter);
             continue;
         }
         // also remove notes within chords
         if ((*iter)->Is(NOTE)) {
-            Note *note = dynamic_cast<Note *>(*iter);
+            Note *note = vrv_cast<Note *>(*iter);
             assert(note);
             if (note->IsChordTone()) {
                 iter = childList->erase(iter);
@@ -94,10 +101,15 @@ void FTrem::FilterList(ListOfObjects *childList)
         ++iter;
     }
 
-    InitCoords(childList);
+    Staff *staff = vrv_cast<Staff *>(this->GetFirstAncestor(STAFF));
+    assert(staff);
+
+    this->InitCoords(childList, staff, BEAMPLACE_NONE);
+    this->InitCue(false);
 }
 
-void FTrem::InitCoords(ListOfObjects *childList)
+/*
+void FTrem::InitCoords(ArrayOfObjects *childList)
 {
     ClearCoords();
 
@@ -124,37 +136,29 @@ void FTrem::InitCoords(ListOfObjects *childList)
         return;
     }
 
-    this->m_drawingParams.m_changingDur = false;
-    this->m_drawingParams.m_beamHasChord = false;
-    this->m_drawingParams.m_hasMultipleStemDir = false;
-    this->m_drawingParams.m_cueSize = false;
+    m_changingDur = false;
+    m_beamHasChord = false;
+    m_hasMultipleStemDir = false;
+    m_cueSize = false;
     // adjust beam->m_drawingParams.m_shortestDur depending on the number of slashes
-    this->m_drawingParams.m_shortestDur = std::max(DUR_8, DUR_1 + this->GetSlash());
-    this->m_drawingParams.m_stemDir = STEMDIRECTION_NONE;
+    m_shortestDur = std::max(DUR_8, DUR_1 + this->GetBeams());
+    m_stemDir = STEMDIRECTION_NONE;
 
     if (firstElement->m_element->Is(CHORD)) {
-        this->m_drawingParams.m_beamHasChord = true;
+        m_beamHasChord = true;
     }
     if (secondElement->m_element->Is(CHORD)) {
-        this->m_drawingParams.m_beamHasChord = true;
+        m_beamHasChord = true;
     }
 
     // For now look at the stemDir only on the first note
     assert(dynamic_cast<AttStems *>(firstElement->m_element));
-    this->m_drawingParams.m_stemDir = (dynamic_cast<AttStems *>(firstElement->m_element))->GetStemDir();
+    m_stemDir = (dynamic_cast<AttStems *>(firstElement->m_element))->GetStemDir();
 
     // We look only at the first note for checking if cue-sized. Somehow arbitrarily
-    this->m_drawingParams.m_cueSize = firstElement->m_element->GetDrawingCueSize();
-}
-
-void FTrem::ClearCoords()
-{
-    ArrayOfBeamElementCoords::iterator iter;
-    for (iter = m_beamElementCoords.begin(); iter != m_beamElementCoords.end(); ++iter) {
-        delete *iter;
-    }
-    m_beamElementCoords.clear();
-}
+    m_cueSize = firstElement->m_element->GetDrawingCueSize();
+ }
+ */
 
 //----------------------------------------------------------------------------
 // Functors methods
@@ -162,35 +166,60 @@ void FTrem::ClearCoords()
 
 int FTrem::CalcStem(FunctorParams *functorParams)
 {
-    CalcStemParams *params = dynamic_cast<CalcStemParams *>(functorParams);
+    CalcStemParams *params = vrv_params_cast<CalcStemParams *>(functorParams);
     assert(params);
 
-    const ListOfObjects *fTremChildren = this->GetList(this);
+    const ArrayOfObjects *fTremChildren = this->GetList(this);
 
     // Should we assert this at the beginning?
     if (fTremChildren->empty()) {
         return FUNCTOR_CONTINUE;
     }
-    const ArrayOfBeamElementCoords *beamElementCoords = this->GetElementCoords();
 
-    assert(beamElementCoords->size() == 2);
+    if (GetElementCoords()->size() != 2) {
+        LogError("Stem calculation: <fTrem> element has invalid number of descendants.");
+        return FUNCTOR_CONTINUE;
+    }
 
-    int elementCount = 2;
+    m_beamSegment.InitCoordRefs(this->GetElementCoords());
 
-    Layer *layer = dynamic_cast<Layer *>(this->GetFirstParent(LAYER));
+    Layer *layer = vrv_cast<Layer *>(this->GetFirstAncestor(LAYER));
     assert(layer);
-    Staff *staff = dynamic_cast<Staff *>(layer->GetFirstParent(STAFF));
+    Staff *staff = vrv_cast<Staff *>(layer->GetFirstAncestor(STAFF));
     assert(staff);
 
-    this->m_drawingParams.CalcBeam(layer, staff, params->m_doc, beamElementCoords, elementCount);
+    m_beamSegment.CalcBeam(layer, staff, params->m_doc, this);
 
     return FUNCTOR_CONTINUE;
 }
 
 int FTrem::ResetDrawing(FunctorParams *functorParams)
 {
+    // Call parent one too
+    LayerElement::ResetDrawing(functorParams);
+
+    m_beamSegment.Reset();
+
     // We want the list of the ObjectListInterface to be re-generated
     this->Modify();
+    return FUNCTOR_CONTINUE;
+}
+
+int FTrem::GenerateMIDI(FunctorParams *functorParams)
+{
+    // GenerateMIDIParams *params = vrv_params_cast<GenerateMIDIParams *>(functorParams);
+    // assert(params);
+
+    FTrem *fTrem = vrv_cast<FTrem *>(this);
+    assert(fTrem);
+
+    if (!fTrem->HasUnitdur()) {
+        return FUNCTOR_CONTINUE;
+    }
+    else {
+        LogWarning("FTrem produces incorrect MIDI output");
+    }
+
     return FUNCTOR_CONTINUE;
 }
 

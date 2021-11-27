@@ -27,14 +27,17 @@ namespace vrv {
 // Arpeg
 //----------------------------------------------------------------------------
 
+static const ClassRegistrar<Arpeg> s_factory("arpeg", ARPEG);
+
 Arpeg::Arpeg()
-    : ControlElement("arpeg-"), PlistInterface(), TimePointInterface(), AttArpegLog(), AttArpegVis(), AttColor()
+    : ControlElement(ARPEG, "arpeg-"), PlistInterface(), TimePointInterface(), AttArpegLog(), AttArpegVis(), AttColor()
 {
     RegisterInterface(PlistInterface::GetAttClasses(), PlistInterface::IsInterface());
     RegisterInterface(TimePointInterface::GetAttClasses(), TimePointInterface::IsInterface());
     RegisterAttClass(ATT_ARPEGLOG);
     RegisterAttClass(ATT_ARPEGVIS);
     RegisterAttClass(ATT_COLOR);
+    RegisterAttClass(ATT_ENCLOSINGCHARS);
 
     Reset();
 }
@@ -49,29 +52,30 @@ void Arpeg::Reset()
     ResetArpegLog();
     ResetArpegVis();
     ResetColor();
+    ResetEnclosingChars();
 
     m_drawingXRel = 0;
 }
 
 int Arpeg::GetDrawingX() const
 {
-    // Getting the position of the current positionner (we have only one for arpeg because values in
+    // Getting the position of the current positioner (we have only one for arpeg because values in
     // @staff are not taken into account for arpeg (only @plist)
-    // The positionner for Arpeg uses the top note as objectX
+    // The positioner for Arpeg uses the top note as objectX
     if (this->GetCurrentFloatingPositioner()) {
         return (GetCurrentFloatingPositioner()->GetDrawingX());
     }
 
     // Otherwise get the measure - no cast to Measure is necessary
-    LogDebug("Accessing an arpeg x without positionner");
-    Object *measure = this->GetFirstParent(MEASURE);
+    LogDebug("Accessing an arpeg x without positioner");
+    Object *measure = this->GetFirstAncestor(MEASURE);
     assert(measure);
 
     // This will be very arbitrary positionned...
     return measure->GetDrawingX() + this->GetDrawingXRel();
 }
 
-bool Arpeg::IsValidRef(Object *ref)
+bool Arpeg::IsValidRef(Object *ref) const
 {
     if (!ref->Is({ CHORD, NOTE })) {
         LogWarning(
@@ -87,8 +91,8 @@ void Arpeg::SetDrawingXRel(int drawingXRel)
     ResetCachedDrawingX();
 
     m_drawingXRel = drawingXRel;
-    // Also update the positonner drawingXRel - this is a duplcation but we need it in
-    // the positionner too for the bounding box calculation and for the DrawingX value
+    // Also update the positioner drawingXRel - this is a duplication but we need it in
+    // the positioner too for the bounding box calculation and for the DrawingX value
     // See GetDrawingX
     if (GetCurrentFloatingPositioner()) {
         GetCurrentFloatingPositioner()->SetDrawingXRel(m_drawingXRel);
@@ -122,7 +126,7 @@ void Arpeg::GetDrawingTopBottomNotes(Note *&top, Note *&bottom)
     if (front == back) {
         // It has to be a chord in this case
         if (front->Is(NOTE)) return;
-        Chord *chord = dynamic_cast<Chord *>(front);
+        Chord *chord = vrv_cast<Chord *>(front);
         assert(chord);
         top = chord->GetTopNote();
         bottom = chord->GetBottomNote();
@@ -136,19 +140,19 @@ void Arpeg::GetDrawingTopBottomNotes(Note *&top, Note *&bottom)
 
     // Get the first and second chord or note
     if (front->Is(CHORD)) {
-        chord1 = dynamic_cast<Chord *>(front);
+        chord1 = vrv_cast<Chord *>(front);
         assert(chord1);
     }
     else {
-        note1 = dynamic_cast<Note *>(front);
+        note1 = vrv_cast<Note *>(front);
         assert(note1);
     }
     if (back->Is(CHORD)) {
-        chord2 = dynamic_cast<Chord *>(back);
+        chord2 = vrv_cast<Chord *>(back);
         assert(chord2);
     }
     else {
-        note2 = dynamic_cast<Note *>(back);
+        note2 = vrv_cast<Note *>(back);
         assert(note2);
     }
 
@@ -174,6 +178,27 @@ void Arpeg::GetDrawingTopBottomNotes(Note *&top, Note *&bottom)
     }
 }
 
+Staff *Arpeg::GetCrossStaff()
+{
+    const ArrayOfObjects *refs = GetRefs();
+    if (refs->empty()) return NULL;
+
+    // Find if there is at least one element that is not cross staff
+    auto iter = std::find_if(refs->begin(), refs->end(), [](Object *obj) {
+        LayerElement *element = vrv_cast<LayerElement *>(obj);
+        assert(element);
+        return !element->m_crossStaff;
+    });
+
+    // If that's the case - return NULL, we can base arpeggio location on the original staff
+    if (iter != refs->end()) return NULL;
+
+    // Otherwise return cross staff of the front element from the references
+    LayerElement *front = vrv_cast<LayerElement *>(refs->front());
+    assert(front);
+    return front->m_crossStaff;
+}
+
 //----------------------------------------------------------------------------
 // Arpeg functor methods
 //----------------------------------------------------------------------------
@@ -187,7 +212,7 @@ int Arpeg::ResetHorizontalAlignment(FunctorParams *functorParams)
 
 int Arpeg::AdjustArpeg(FunctorParams *functorParams)
 {
-    AdjustArpegParams *params = dynamic_cast<AdjustArpegParams *>(functorParams);
+    AdjustArpegParams *params = vrv_params_cast<AdjustArpegParams *>(functorParams);
     assert(params);
 
     Note *topNote = NULL;
@@ -201,14 +226,17 @@ int Arpeg::AdjustArpeg(FunctorParams *functorParams)
     // We should have call DrawArpeg before
     assert(this->GetCurrentFloatingPositioner());
 
-    Staff *topStaff = dynamic_cast<Staff *>(topNote->GetFirstParent(STAFF));
+    Staff *topStaff = vrv_cast<Staff *>(topNote->GetFirstAncestor(STAFF));
     assert(topStaff);
 
-    Staff *bottomStaff = dynamic_cast<Staff *>(bottomNote->GetFirstParent(STAFF));
+    Staff *bottomStaff = vrv_cast<Staff *>(bottomNote->GetFirstAncestor(STAFF));
     assert(bottomStaff);
 
+    Staff *crossStaff = GetCrossStaff();
+    const int staffN = (crossStaff != NULL) ? crossStaff->GetN() : topStaff->GetN();
+
     int minTopLeft, maxTopRight;
-    topNote->GetAlignment()->GetLeftRight(topStaff->GetN(), minTopLeft, maxTopRight);
+    topNote->GetAlignment()->GetLeftRight(staffN, minTopLeft, maxTopRight);
 
     params->m_alignmentArpegTuples.push_back(std::make_tuple(topNote->GetAlignment(), this, topStaff->GetN(), false));
 
@@ -224,11 +252,24 @@ int Arpeg::AdjustArpeg(FunctorParams *functorParams)
     if (minTopLeft != -VRV_UNSET) {
         int dist = topNote->GetDrawingX() - minTopLeft;
         // HARDCODED
-        dist += (params->m_doc->GetDrawingUnit(topStaff->m_drawingStaffSize));
+        double unitFactor = 1.0;
+        if ((this->GetEnclose() == ENCLOSURE_brack) || (this->GetEnclose() == ENCLOSURE_box)) unitFactor += 0.75;
+        if (this->GetArrow() == BOOLEAN_true) unitFactor += 0.33;
+        dist += unitFactor * params->m_doc->GetDrawingUnit(topStaff->m_drawingStaffSize);
         this->SetDrawingXRel(-dist);
     }
 
     return FUNCTOR_CONTINUE;
+}
+
+int Arpeg::ResetDrawing(FunctorParams *functorParams)
+{
+    // Call parent one too
+    ControlElement::ResetDrawing(functorParams);
+
+    PlistInterface *interface = this->GetPlistInterface();
+    assert(interface);
+    return interface->InterfaceResetDrawing(functorParams, this);
 }
 
 } // namespace vrv

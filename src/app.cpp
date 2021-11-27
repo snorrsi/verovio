@@ -23,14 +23,16 @@ namespace vrv {
 // App
 //----------------------------------------------------------------------------
 
-App::App() : EditorialElement("app-")
+static const ClassRegistrar<App> s_factory("app", APP);
+
+App::App() : EditorialElement(APP, "app-")
 {
     m_level = EDITORIAL_UNDEFINED;
 
     Reset();
 }
 
-App::App(EditorialLevel level) : EditorialElement("app-")
+App::App(EditorialLevel level) : EditorialElement(APP, "app-")
 {
     m_level = level;
 
@@ -44,7 +46,7 @@ void App::Reset()
 
 App::~App() {}
 
-void App::AddChild(Object *child)
+bool App::IsSupportedChild(Object *child)
 {
     if (child->Is(LEM)) {
         assert(dynamic_cast<Lem *>(child));
@@ -53,13 +55,9 @@ void App::AddChild(Object *child)
         assert(dynamic_cast<Rdg *>(child));
     }
     else {
-        LogError("Adding '%s' to a '%s'", child->GetClassName().c_str(), this->GetClassName().c_str());
-        assert(false);
+        return false;
     }
-
-    child->SetParent(this);
-    m_children.push_back(child);
-    Modify();
+    return true;
 }
 
 //----------------------------------------------------------------------------

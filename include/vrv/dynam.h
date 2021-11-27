@@ -8,6 +8,7 @@
 #ifndef __VRV_DYNAM_H__
 #define __VRV_DYNAM_H__
 
+#include "atts_midi.h"
 #include "controlelement.h"
 #include "textdirinterface.h"
 #include "timeinterface.h"
@@ -24,7 +25,11 @@ class Dynam : public ControlElement,
               public TextListInterface,
               public TextDirInterface,
               public TimeSpanningInterface,
+              public AttEnclosingChars,
               public AttExtender,
+              public AttLineRendBase,
+              public AttMidiValue,
+              public AttMidiValue2,
               public AttVerticalGroup {
 public:
     /**
@@ -34,32 +39,51 @@ public:
     ///@{
     Dynam();
     virtual ~Dynam();
-    virtual void Reset();
-    virtual std::string GetClassName() const { return "Dynam"; }
-    virtual ClassId GetClassId() const { return DYNAM; }
+    Object *Clone() const override { return new Dynam(*this); }
+    void Reset() override;
+    std::string GetClassName() const override { return "Dynam"; }
     ///@}
 
     /**
      * @name Getter to interfaces
      */
     ///@{
-    virtual TextDirInterface *GetTextDirInterface() { return dynamic_cast<TextDirInterface *>(this); }
-    virtual TimePointInterface *GetTimePointInterface() { return dynamic_cast<TimePointInterface *>(this); }
-    virtual TimeSpanningInterface *GetTimeSpanningInterface() { return dynamic_cast<TimeSpanningInterface *>(this); }
+    TextDirInterface *GetTextDirInterface() override { return dynamic_cast<TextDirInterface *>(this); }
+    TimePointInterface *GetTimePointInterface() override { return dynamic_cast<TimePointInterface *>(this); }
+    TimeSpanningInterface *GetTimeSpanningInterface() override { return dynamic_cast<TimeSpanningInterface *>(this); }
     ///@}
 
     /**
      * Add an element (text, rend. etc.) to a dynam.
      * Only supported elements will be actually added to the child list.
      */
-    virtual void AddChild(Object *object);
+    bool IsSupportedChild(Object *object) override;
 
     /**
      * Return true if the dynam text is only composed of f, p, r, z, etc. letters (e.g. sfz)
      */
     bool IsSymbolOnly();
 
+    /**
+     * Return the SMuFL str for the dynamic symbol.
+     * Call IsSymbolOnly first to check.
+     */
     std::wstring GetSymbolStr() const;
+
+    /**
+     * See FloatingObject::IsExtenderElement
+     */
+    bool IsExtenderElement() const override { return GetExtender() == BOOLEAN_true; }
+
+    //----------------//
+    // Static methods //
+    //----------------//
+
+    static bool GetSymbolsInStr(std::wstring &str, ArrayOfStringDynamTypePairs &tokens);
+
+    static bool IsSymbolOnly(const std::wstring &str);
+
+    static std::wstring GetSymbolStr(const std::wstring &str);
 
     //----------//
     // Functors //
@@ -68,7 +92,12 @@ public:
     /**
      * See Object::PrepareFloatingGrps
      */
-    virtual int PrepareFloatingGrps(FunctorParams *functoParams);
+    int PrepareFloatingGrps(FunctorParams *functorParams) override;
+
+    /**
+     * See Object::PrepareEnclosedDynam
+     */
+    int PrepareDynamEnclosure(FunctorParams *functoParams) override;
 
 protected:
     //

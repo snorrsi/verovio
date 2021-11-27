@@ -9,6 +9,8 @@
 #define __VRV_DOC_H__
 
 #include "devicecontextbase.h"
+#include "expansionmap.h"
+#include "facsimile.h"
 #include "options.h"
 #include "scoredef.h"
 
@@ -25,7 +27,7 @@ class Pages;
 class Page;
 class Score;
 
-enum DocType { Raw = 0, Rendering, Transcription };
+enum DocType { Raw = 0, Rendering, Transcription, Facs };
 
 //----------------------------------------------------------------------------
 // Doc
@@ -44,18 +46,17 @@ public:
     ///@{
     Doc();
     virtual ~Doc();
-    virtual ClassId GetClassId() const { return DOC; }
     ///@}
 
     /**
      * Add a page to the document
      */
-    virtual void AddChild(Object *object);
+    bool IsSupportedChild(Object *object) override;
 
-    /*
+    /**
      * Clear the content of the document.
      */
-    virtual void Reset();
+    void Reset() override;
 
     /**
      * Refreshes the views from Doc.
@@ -75,9 +76,14 @@ public:
     bool GenerateDocumentScoreDef();
 
     /**
+     * Generate a document pgFoot if none is provided
+     */
+    bool GenerateFooter();
+
+    /**
      * Generate a document pgHead from the MEI header if none is provided
      */
-    bool GenerateHeaderAndFooter();
+    bool GenerateHeader();
 
     /**
      * Generate measure numbers from measure attributes
@@ -97,10 +103,9 @@ public:
     bool HasPage(int pageIdx);
 
     /**
-     * Get the Score in the visible Mdiv.
-     * Will find it only when having read a score-based MEI file
+     * Get all the Score in the visible Mdiv.
      */
-    Score *GetScore();
+    std::list<Score *> GetScores();
 
     /**
      * Get the Pages in the visible Mdiv.
@@ -125,7 +130,10 @@ public:
     ///@{
     int GetGlyphHeight(wchar_t code, int staffSize, bool graceSize) const;
     int GetGlyphWidth(wchar_t code, int staffSize, bool graceSize) const;
-    int GetGlyphDescender(wchar_t code, int staffSize, bool graceSize) const;
+    int GetGlyphLeft(wchar_t code, int staffSize, bool graceSize) const;
+    int GetGlyphRight(wchar_t code, int staffSize, bool graceSize) const;
+    int GetGlyphBottom(wchar_t code, int staffSize, bool graceSize) const;
+    int GetGlyphTop(wchar_t code, int staffSize, bool graceSize) const;
     int GetGlyphAdvX(wchar_t code, int staffSize, bool graceSize) const;
     int GetDrawingUnit(int staffSize) const;
     int GetDrawingDoubleUnit(int staffSize) const;
@@ -140,8 +148,10 @@ public:
     int GetDrawingHairpinSize(int staffSize, bool withMargin) const;
     int GetDrawingBeamWidth(int staffSize, bool graceSize) const;
     int GetDrawingBeamWhiteWidth(int staffSize, bool graceSize) const;
-    int GetDrawingLedgerLineLength(int staffSize, bool graceSize) const;
+    int GetDrawingLedgerLineExtension(int staffSize, bool graceSize) const;
+    int GetDrawingMinimalLedgerLineExtension(int staffSize, bool graceSize) const;
     int GetCueSize(int value) const;
+    double GetCueScaling() const;
     ///@}
 
     Point ConvertFontPoint(const Glyph *glyph, const Point &fontPoint, int staffSize, bool graceSize) const;
@@ -153,8 +163,10 @@ public:
     ///@{
     int GetTextGlyphHeight(wchar_t code, FontInfo *font, bool graceSize) const;
     int GetTextGlyphWidth(wchar_t code, FontInfo *font, bool graceSize) const;
+    int GetTextGlyphAdvX(wchar_t code, FontInfo *font, bool graceSize) const;
     int GetTextGlyphDescender(wchar_t code, FontInfo *font, bool graceSize) const;
     int GetTextLineHeight(FontInfo *font, bool graceSize) const;
+    int GetTextXHeight(FontInfo *font, bool graceSize) const;
     ///@}
 
     /**
@@ -164,6 +176,7 @@ public:
     ///@{
     FontInfo *GetDrawingSmuflFont(int staffSize, bool graceSize);
     FontInfo *GetDrawingLyricFont(int staffSize);
+    FontInfo *GetFingeringFont(int staffSize);
     ///@}
 
     /**
@@ -172,11 +185,19 @@ public:
      */
     ///@{
     double GetLeftMargin(const ClassId classId) const;
+    double GetLeftMargin(Object *object) const;
     double GetRightMargin(const ClassId classId) const;
+    double GetRightMargin(Object *object) const;
     double GetLeftPosition() const;
     double GetBottomMargin(const ClassId classId) const;
     double GetTopMargin(const ClassId classId) const;
     ///@}
+
+    /**
+     * Get the default distance from the staff for the object
+     * The distance is given in x * MEI UNIT
+     */
+    double GetStaffDistance(const ClassId classId, int staffIndex, data_STAFFREL staffPosition);
 
     /**
      * Prepare the MIDI timemap for MIDI and timemap file export.
@@ -202,9 +223,14 @@ public:
      * Run trough all the layers and fill the timemap file content.
      */
     bool ExportTimemap(std::string &output);
-    void PrepareJsonTimemap(std::string &output, std::map<int, double> &realTimeToScoreTime,
-        std::map<int, std::vector<std::string> > &realTimeToOnElements,
-        std::map<int, std::vector<std::string> > &realTimeToOffElements, std::map<int, int> &realTimeToTempo);
+    void PrepareJsonTimemap(std::string &output, std::map<double, double> &realTimeToScoreTime,
+        std::map<double, std::vector<std::string>> &realTimeToOnElements,
+        std::map<double, std::vector<std::string>> &realTimeToOffElements, std::map<double, double> &realTimeToTempo);
+
+    /**
+     * Extract music features to JSON string.
+     */
+    bool ExportFeatures(std::string &output, const std::string &options);
 
     /**
      * Set the initial scoreDef of each page.
@@ -212,12 +238,17 @@ public:
      * It uses the MusObject::SetPageScoreDef functor method for parsing the file.
      * This will be done only if m_currentScoreDefDone is false or force is true.
      */
-    void SetCurrentScoreDefDoc(bool force = false);
+    void ScoreDefSetCurrentDoc(bool force = false);
 
     /**
      * Optimize the scoreDef once the document is cast-off.
      */
-    void OptimizeScoreDefDoc(bool encoded = false);
+    void ScoreDefOptimizeDoc();
+
+    /**
+     * Set the GrpSym start / end for each System once ScoreDef is set and (if necessary) optimized
+     */
+    void ScoreDefSetGrpSymDoc();
 
     /**
      * Prepare the document for drawing.
@@ -231,6 +262,26 @@ public:
      * Starting from a single system, create and fill pages and systems.
      */
     void CastOffDoc();
+
+    /**
+     * Casts off the entire document, only using the document's system breaks
+     * if they would be close to the end in the normal document.
+     */
+    void CastOffSmartDoc();
+
+    /**
+     * Casts off the entire document, using the document's line breaks,
+     * but adding its own page breaks.
+     */
+    void CastOffLineDoc();
+
+    /**
+     * Casts off the entire document, with options for obeying breaks.
+     * @param useSb - true to use the sb from the document.
+     * @param usePb - true to use the pb from the document.
+     * @param smart - true to sometimes use encoded sb and pb.
+     */
+    void CastOffDocBase(bool useSb, bool usePb, bool smart = false);
 
     /**
      * Casts off the running elements (headers and footer)
@@ -255,7 +306,7 @@ public:
 
     /**
      * Convert the doc from score-based to page-based MEI.
-     * Containers will be converted to boundaryStart / boundaryEnd.
+     * Containers will be converted to systemElementStart / systemElementEnd.
      * Does not perform any check if the data needs or can be converted.
      */
     void ConvertToPageBasedDoc();
@@ -263,20 +314,26 @@ public:
     /**
      * Convert mensural MEI into cast-off (measure) segments looking at the barLine objects.
      * Segment positions occur where a barLine is set on all staves.
+     * castOff parameters indicates if we perform cast off (true) or un-cast off
      */
-    void ConvertToCastOffMensuralDoc();
-
-    /**
-     * Reverse of ConvertToCastOffMensuralDoc()
-     */
-    void ConvertToUnCastOffMensuralDoc();
+    void ConvertToCastOffMensuralDoc(bool castOff);
 
     /**
      * Convert analytical encoding (@fermata, @tie) to correpsonding elements
      * By default, the element are used only for the rendering and not preserved in the MEI output
      * Permanent conversion discard analytical markup and elements will be preserved in the MEI output.
      */
-    void ConvertAnalyticalMarkupDoc(bool permanent = false);
+    void ConvertMarkupDoc(bool permanent = true);
+
+    /**
+     * Transpose the content of the doc.
+     */
+    void TransposeDoc();
+
+    /**
+     * Convert encoded <expansion> before rendering
+     */
+    void ExpandExpansions();
 
     /**
      * To be implemented.
@@ -318,9 +375,11 @@ public:
     int GetAdjustedDrawingPageHeight() const;
 
     /**
-     * Setter for analytical markup flag
+     * Setter for markup flag. See corresponding enum in vrvdef.h
+     * Set when reading the file to indicate what markup conversion needs to be applied.
+     * See Doc::ConvertMarkupDoc
      */
-    void SetAnalyticalMarkup(bool hasAnalyticalMarkup) { m_hasAnalyticalMarkup = hasAnalyticalMarkup; }
+    void SetMarkup(int markup) { m_markup |= markup; }
 
     /**
      * @name Setter for and getter for mensural only flag
@@ -330,6 +389,27 @@ public:
     bool IsMensuralMusicOnly() const { return m_isMensuralMusicOnly; }
     ///@}
 
+    /**
+     * @name Setter and getter for facsimile
+     */
+    ///@{
+    void SetFacsimile(Facsimile *facsimile) { m_facsimile = facsimile; }
+    Facsimile *GetFacsimile() { return m_facsimile; }
+    bool HasFacsimile() const { return m_facsimile != NULL; }
+    ///@}
+
+    /**
+     * @name Setter and getter for the current Score/ScoreDef.
+     * If not set, then looks for the first Score in the Document and use that.
+     * The currentScoreDef is also changed by the Object::Process whenever as Score is reached.
+     * When processing backward, the ScoreDef is changed when reaching the corresponding PageElementEnd
+     */
+    ///@{
+    Score *GetCurrentScore();
+    ScoreDef *GetCurrentScoreDef();
+    void SetCurrentScore(Score *score);
+    ///@}
+
     //----------//
     // Functors //
     //----------//
@@ -337,12 +417,12 @@ public:
     /**
      * See Object::PrepareLyricsEnd
      */
-    virtual int PrepareLyricsEnd(FunctorParams *functorParams);
-    
+    int PrepareLyricsEnd(FunctorParams *functorParams) override;
+
     /**
      * See Object::PrepareTimestampsEnd
      */
-    virtual int PrepareTimestampsEnd(FunctorParams *functorParams);
+    int PrepareTimestampsEnd(FunctorParams *functorParams) override;
 
 private:
     /**
@@ -355,29 +435,27 @@ public:
      * A copy of the header tree stored as pugi::xml_document
      */
     pugi::xml_document m_header;
-    
+
     /**
      * A copy of the header tree stored as pugi::xml_document
      */
     pugi::xml_document m_front;
-    
+
     /**
      * A copy of the header tree stored as pugi::xml_document
      */
     pugi::xml_document m_back;
 
-    /**
-     * Holds the top scoreDef.
-     * In a standard MEI file, this is the <scoreDef> encoded before the first <section>.
-     */
-    ScoreDef m_scoreDef;
-
     /** The current page height */
     int m_drawingPageHeight;
     /** The current page width */
     int m_drawingPageWidth;
+    /** The current page content height (without margings) */
+    int m_drawingPageContentHeight;
+    /** The current page content width (without margins) */
+    int m_drawingPageContentWidth;
     /** The current page bottom margin */
-    int m_drawingPageMarginBot;
+    int m_drawingPageMarginBottom;
     /** The current page left margin */
     int m_drawingPageMarginLeft;
     /** The current page right margin */
@@ -388,6 +466,15 @@ public:
     float m_drawingBeamMinSlope;
     /** the current beam maximal slope */
     float m_drawingBeamMaxSlope;
+
+    /**
+     * Record notation type for document.
+     * (This should be improved by storing a vector of all notation types of the document for cases mixing notations)
+     */
+    data_NOTATIONTYPE m_notationType;
+
+    /** An expansion map that contains  */
+    ExpansionMap m_expansionMap;
 
 private:
     /**
@@ -402,6 +489,14 @@ private:
      * This could be saved somewhere as preferences (todo).
      */
     Options *m_options;
+
+    /**
+     * @name Holds a pointer to the current score/scoreDef.
+     * Set by Doc::GetCurrentScoreDef or explicitly through Doc::SetCurrentScoreDef
+     */
+    ///@{
+    Score *m_currentScore;
+    ///@}
 
     /*
      * The following values are set in the Doc::SetDrawingPage.
@@ -418,8 +513,6 @@ private:
     int m_drawingBeamWidth;
     /** Height of a beam spacing (white) (10 and 6 by default) */
     int m_drawingBeamWhiteWidth;
-    /** Ledger line length and normal and grace size */
-    int m_drawingLedgerLine;
     /** Brevis width */
     int m_drawingBrevisWidth;
 
@@ -427,14 +520,18 @@ private:
     int m_drawingSmuflFontSize;
     /** Lyric font size  */
     int m_drawingLyricFontSize;
+    /** Fingering font size*/
+    int m_fingeringFontSize;
     /** Current music font */
     FontInfo m_drawingSmuflFont;
     /** Current lyric font */
     FontInfo m_drawingLyricFont;
+    /** Current fingering font */
+    FontInfo m_fingeringFont;
 
     /**
      * A flag to indicate whether the currentScoreDef has been set or not.
-     * If yes, SetCurrentScoreDef will not parse the document (again) unless
+     * If yes, ScoreDefSetCurrent will not parse the document (again) unless
      * the force parameter is set.
      */
     bool m_currentScoreDefDone;
@@ -448,16 +545,16 @@ private:
     /**
      * A flag to indicate that the MIDI timemap has been calculated.  The
      * timemap needs to be prepared before MIDI files or timemap JSON files
-     * are generated.
+     * are generated. Value is 0.0 when no timemap has been generated.
      */
-    bool m_hasMidiTimemap;
+    double m_MIDITimemapTempo;
 
     /**
      * A flag to indicate whereas the document contains analytical markup to be converted.
      * This is currently limited to @fermata and @tie. Other attribute markup (@accid and @artic)
-     * is converted during the import in MeiInput.
+     * is converted during the import in MEIInput.
      */
-    bool m_hasAnalyticalMarkup;
+    int m_markup;
 
     /**
      * A flag to indicate whereas to document contains only mensural music.
@@ -477,6 +574,9 @@ private:
     int m_pageMarginRight;
     /** Page top margin (MEI scoredef@page.topmar) - currently not saved */
     int m_pageMarginTop;
+
+    /** Facsimile information */
+    Facsimile *m_facsimile;
 };
 
 } // namespace vrv

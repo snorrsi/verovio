@@ -8,6 +8,7 @@
 #ifndef __VRV_ACCID_H__
 #define __VRV_ACCID_H__
 
+#include "atts_externalsymbols.h"
 #include "atts_gestural.h"
 #include "layerelement.h"
 #include "positioninterface.h"
@@ -29,7 +30,8 @@ class Accid : public LayerElement,
               public AttAccidentalGestural,
               public AttAccidLog,
               public AttColor,
-              public AttEnclosingChars {
+              public AttEnclosingChars,
+              public AttExtSym {
 public:
     /**
      * @name Constructors, destructors, and other standard methods
@@ -38,15 +40,18 @@ public:
     ///@{
     Accid();
     virtual ~Accid();
-    virtual void Reset();
-    virtual std::string GetClassName() const { return "Accid"; }
-    virtual ClassId GetClassId() const { return ACCID; }
+    Object *Clone() const override { return new Accid(*this); }
+    void Reset() override;
+    std::string GetClassName() const override { return "Accid"; }
     ///@}
 
-    virtual PositionInterface *GetPositionInterface() { return dynamic_cast<PositionInterface *>(this); }
+    /** Override the method since it is align to the staff */
+    bool IsRelativeToStaff() const override { return (this->HasLoc() || (this->HasOloc() && this->HasPloc())); }
+
+    PositionInterface *GetPositionInterface() override { return dynamic_cast<PositionInterface *>(this); }
 
     /** Override the method since alignment is required */
-    virtual bool HasToBeAligned() const { return true; }
+    bool HasToBeAligned() const override { return true; }
 
     /**
      * @name Set and get drawing octave flag
@@ -59,12 +64,33 @@ public:
     ///@}
 
     /**
+     * @name Set and get drawing unison accid
+     */
+    ///@{
+    void SetDrawingUnisonAccid(Accid *drawingUnison) { m_drawingUnison = drawingUnison; }
+    Accid *GetDrawingUnisonAccid() const { return m_drawingUnison; }
+    ///@}
+
+    /**
      * Retrieve SMuFL string for the accidental.
      * This will include brackets
      */
-    std::wstring GetSymbolStr() const;
+    std::wstring GetSymbolStr(const data_NOTATIONTYPE notationType) const;
 
-    bool AdjustX(LayerElement *element, Doc *doc, int staffSize, std::vector<Accid *> &leftAccids);
+    /**
+     * Adjust X position of accid in relation to other element
+     */
+    void AdjustX(LayerElement *element, Doc *doc, int staffSize, std::vector<Accid *> &leftAccids,
+        std::vector<Accid *> &adjustedAccids);
+
+    /**
+     * Adjust accid position if it's placed above/below staff so that it does not overlap with ledger lines
+     */
+    void AdjustToLedgerLines(Doc *doc, LayerElement *element, int staffSize);
+
+    //----------------//
+    // Static methods //
+    //----------------//
 
     /**
      * @name Method used for drawing accidentals on ornaments
@@ -78,12 +104,12 @@ public:
     /**
      * See Object::ResetDrawing
      */
-    virtual int ResetDrawing(FunctorParams *functorParams);
+    int ResetDrawing(FunctorParams *functorParams) override;
 
     /**
      * See Object::ResetHorizontalAlignment
      */
-    virtual int ResetHorizontalAlignment(FunctorParams *functorParams);
+    int ResetHorizontalAlignment(FunctorParams *functorParams) override;
 
 private:
     //
@@ -91,6 +117,7 @@ public:
     //
 private:
     Accid *m_drawingOctave;
+    Accid *m_drawingUnison;
     bool m_isDrawingOctave;
 };
 
@@ -108,13 +135,19 @@ public:
 
     bool operator()(const Accid *first, const Accid *second) const
     {
-        if (first->GetDrawingY() < second->GetDrawingY())
+        if (first->GetDrawingY() < second->GetDrawingY()) {
             return true;
-        else if (first->GetDrawingY() > second->GetDrawingY())
+        }
+        else if (first->GetDrawingY() > second->GetDrawingY()) {
             return false;
-        // with unissons, look at the layer @n
-        else
-            return (first->GetAlignmentLayerN() < second->GetAlignmentLayerN());
+        }
+        else {
+            // with unissons, natural should always be the last accidental (assuming there is a natural)
+            if ((first->GetAccid() == ACCIDENTAL_WRITTEN_n) || (second->GetAccid() == ACCIDENTAL_WRITTEN_n)) {
+                return (first->GetAccid() != ACCIDENTAL_WRITTEN_n);
+            }
+            return first->GetDrawingY() < second->GetDrawingY();
+        }
     }
 };
 

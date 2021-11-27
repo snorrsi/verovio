@@ -10,6 +10,7 @@
 
 #include "atts_cmn.h"
 #include "atts_cmnornaments.h"
+#include "atts_externalsymbols.h"
 #include "controlelement.h"
 #include "timeinterface.h"
 
@@ -25,8 +26,9 @@ namespace vrv {
 class Mordent : public ControlElement,
                 public TimePointInterface,
                 public AttColor,
+                public AttExtSym,
                 public AttOrnamentAccid,
-                public AttPlacement,
+                public AttPlacementRelStaff,
                 public AttMordentLog {
 public:
     /**
@@ -36,17 +38,22 @@ public:
     ///@{
     Mordent();
     virtual ~Mordent();
-    virtual void Reset();
-    virtual std::string GetClassName() const { return "Mordent"; }
-    virtual ClassId GetClassId() const { return MORDENT; }
+    Object *Clone() const override { return new Mordent(*this); }
+    void Reset() override;
+    std::string GetClassName() const override { return "Mordent"; }
     ///@}
 
     /**
      * @name Getter to interfaces
      */
     ///@{
-    virtual TimePointInterface *GetTimePointInterface() { return dynamic_cast<TimePointInterface *>(this); }
+    TimePointInterface *GetTimePointInterface() override { return dynamic_cast<TimePointInterface *>(this); }
     ///@}
+
+    /**
+     * Get the SMuFL glyph for the mordent based on type, long attribute or glyph.num
+     */
+    wchar_t GetMordentGlyph() const;
 
     //----------//
     // Functors //

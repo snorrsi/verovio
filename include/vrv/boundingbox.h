@@ -14,7 +14,10 @@
 
 namespace vrv {
 
+#define BEZIER_APPROXIMATION 50.0
+
 class Doc;
+class FloatingCurvePositioner;
 class Glyph;
 
 //----------------------------------------------------------------------------
@@ -33,7 +36,7 @@ public:
     ///@{
     BoundingBox();
     virtual ~BoundingBox(){};
-    virtual ClassId GetClassId() const;
+    virtual ClassId GetClassId() const = 0;
     bool Is(ClassId classId) const { return (this->GetClassId() == classId); }
     bool Is(const std::vector<ClassId> &classIds) const;
     ///@}
@@ -113,6 +116,20 @@ public:
     ///@}
 
     /**
+     * @name Get wrappers
+     */
+    ///@{
+    int GetBottomBy(Accessor type) const { return ((type == SELF) ? GetSelfBottom() : GetContentBottom()); }
+    int GetTopBy(Accessor type) const { return ((type == SELF) ? GetSelfTop() : GetContentTop()); }
+    int GetLeftBy(Accessor type) const { return ((type == SELF) ? GetSelfLeft() : GetContentLeft()); }
+    int GetRightBy(Accessor type) const { return ((type == SELF) ? GetSelfRight() : GetContentRight()); }
+    int GetX1By(Accessor type) const { return ((type == SELF) ? GetSelfX1() : GetContentX1()); }
+    int GetX2By(Accessor type) const { return ((type == SELF) ? GetSelfX2() : GetContentX2()); }
+    int GetY1By(Accessor type) const { return ((type == SELF) ? GetSelfY1() : GetContentY1()); }
+    int GetY2By(Accessor type) const { return ((type == SELF) ? GetSelfY2() : GetContentY2()); }
+    ///@}
+
+    /**
      * @name Return true if the bounding box has a horizontal / vertical overlap with the other one.
      * Makes an overal bounding box overlap calculation without looking at anchor points
      */
@@ -142,7 +159,11 @@ public:
      * Return true if the bounding box intersects with the curve represented by the FloatingPositioner.
      * The Object pointed by the FloatingPositioner is expected to be a SLUR or a TIE
      */
-    int Intersects(FloatingPositioner *curve, int margin = 0) const;
+    int Intersects(FloatingCurvePositioner *curve, Accessor type, int margin = 0) const;
+
+    //----------------//
+    // Static methods //
+    //----------------//
 
     /**
      * Swap values.
@@ -156,15 +177,44 @@ public:
      */
     static void SwapPoints(Point &p1, Point &p2);
 
+    static std::pair<double, int> ApproximateBezierExtrema(
+        const Point bezier[4], bool isMaxExtrema, int approximationSteps = BEZIER_APPROXIMATION);
+
+    /**
+     * Calculate the slope represented by two points
+     */
+    static double CalcSlope(Point const &p1, Point const &p2);
+
     /**
      * Calculate the position of a point after a rotation of alpha (in radian) around the center
      */
     static Point CalcPositionAfterRotation(Point point, float alpha, Point center);
 
     /**
+     * Calculate the t parameter of a bezier at position x
+     */
+    static double CalcBezierParamAtPosition(const Point bezier[4], int x);
+
+    /**
      * Calculate the y position of a bezier at position x
      */
     static int CalcBezierAtPosition(const Point bezier[4], int x);
+
+    /**
+     * Calculate linear interpolation between two points at time t
+     */
+    static void CalcLinearInterpolation(Point &dest, const Point &a, const Point &b, double t);
+
+    /**
+     * Calculate point (X,Y) coordinaties on the bezier curve
+     */
+    static Point CalcPointAtBezier(const Point bezier[4], double t);
+
+    /**
+     * Calculate thickness coefficient to be applient for bezier curve to fit MEI units thickness
+     */
+    static double GetBezierThicknessCoefficient(
+        const Point bezier[4], int currentThickness, double angle, int penWidth);
 
     /**
      * Calculate the point bezier point position for a t between 0.0 and 1.0
@@ -192,6 +242,12 @@ public:
     static int RectTopOverlap(const Point rect1[2], const Point rect2[2], int margin, int hMargin);
     static int RectBottomOverlap(const Point rect1[2], const Point rect2[2], int margin, int hMargin);
     ///@}
+
+    /**
+     * Solve the cubic equation ax^3 + bx^2 + cx + d = 0
+     * Returns up to three real roots
+     */
+    static std::set<double> SolveCubicPolynomial(double a, double b, double c, double d);
 
 private:
     /**

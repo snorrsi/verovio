@@ -8,8 +8,12 @@
 #ifndef __VRV_IO_H__
 #define __VRV_IO_H__
 
-#include <fstream>
+#include <string>
 #include <vector>
+
+//----------------------------------------------------------------------------
+
+#include "vrvdef.h"
 
 namespace vrv {
 
@@ -17,25 +21,20 @@ class Doc;
 class Object;
 
 //----------------------------------------------------------------------------
-// FileOutputStream
+// Output
 //----------------------------------------------------------------------------
 
 /**
- * This class is a base class for file output stream classes.
+ * This class is a base class for output classes.
  * It is not an abstract class but should not be instanciated directly.
  */
-class FileOutputStream : public std::ofstream {
+class Output {
 public:
     // constructors and destructors
-    FileOutputStream(Doc *doc, std::string filename);
-    FileOutputStream(Doc *doc);
-    FileOutputStream(){};
-    virtual ~FileOutputStream();
-
-    /**
-     * Dummy export method that must be overridden in child class.
-     */
-    virtual bool ExportFile() { return true; }
+    Output(Doc *doc, std::string filename);
+    Output(Doc *doc);
+    Output(){};
+    virtual ~Output();
 
     /**
      * Dummy object method that must be overridden in child class.
@@ -54,32 +53,30 @@ protected:
 };
 
 //----------------------------------------------------------------------------
-// FileInputStream
+// Input
 //----------------------------------------------------------------------------
 
 /**
- * This class is a base class for file input stream classes.
+ * This class is a base class for input classes.
  * It is not an abstract class but should not be instanciated directly.
  */
-class FileInputStream : public std::ifstream {
+class Input {
 public:
     // constructors and destructors
-    FileInputStream(Doc *doc, std::string filename);
-    FileInputStream(Doc *doc);
-    virtual ~FileInputStream();
+    Input(Doc *doc);
+    virtual ~Input();
 
     void SetOutputFormat(const std::string &format) { m_outformat = format; }
     std::string GetOutputFormat() { return m_outformat; }
 
     // read
-    virtual bool ImportFile() { return true; }
-    virtual bool ImportString(std::string const &data) { return true; }
+    virtual bool Import(std::string const &data) { return true; }
 
     /**
      * Getter for layoutInformation flag that is set to true during import
      * if layout information is found (and not to be ignored).
      */
-    bool HasLayoutInformation() { return m_hasLayoutInformation; }
+    LayoutInformation GetLayoutInformation() { return m_layoutInformation; }
 
 private:
     /**
@@ -94,11 +91,11 @@ protected:
     Doc *m_doc;
 
     /**
-     * Becomes true if layout information is found during the import.
-     * This will be true if the file is page-based MEI or if the MEI
-     * file contains <pb> and <sb>. This will stay wrong with PAE import
+     * Indicates if we have layout information in the file loaded.
+     * The value will be LAYOUT_ENCODED if we have <pb> or <sb> elements and LAYOUT_DONE for page-based MEI.
+     * This value remains LAYOUT_NONE with PAE import
      */
-    bool m_hasLayoutInformation;
+    LayoutInformation m_layoutInformation;
 
     std::string m_outformat = "mei";
 };

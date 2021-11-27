@@ -9,6 +9,7 @@
 #define __VRV_STAFFDEF_H__
 
 #include "atts_mei.h"
+#include "atts_midi.h"
 #include "atts_shared.h"
 #include "scoredef.h"
 
@@ -29,6 +30,8 @@ class StaffDef : public ScoreDefElement,
                  public AttNotationType,
                  public AttScalable,
                  public AttStaffDefLog,
+                 public AttStaffDefVis,
+                 public AttTimeBase,
                  public AttTransposition {
 public:
     /**
@@ -38,17 +41,16 @@ public:
     ///@{
     StaffDef();
     virtual ~StaffDef();
-    virtual Object *Clone() const { return new StaffDef(*this); }
-    virtual void Reset();
-    virtual std::string GetClassName() const { return "StaffDef"; }
-    virtual ClassId GetClassId() const { return STAFFDEF; }
+    Object *Clone() const override { return new StaffDef(*this); }
+    void Reset() override;
+    std::string GetClassName() const override { return "StaffDef"; }
     ///@}
 
     /**
      * @name Methods for adding allowed content
      */
     ///@{
-    virtual void AddChild(Object *object);
+    bool IsSupportedChild(Object *object) override;
 
     /**
      * @name Setter and getter of the drawing visible flag
@@ -57,12 +59,6 @@ public:
     VisibilityOptimization GetDrawingVisibility() const { return m_drawingVisibility; }
     void SetDrawingVisibility(VisibilityOptimization drawingIsVisible) { m_drawingVisibility = drawingIsVisible; }
     ///@}
-                     
-    /**
-     * Return true if the staffDef in in a braced staffGrp within a bracket staffGrp.
-     * Used for increasing the spacing in View::DrawStaffDefLabels.
-     */
-    bool IsInBraceAndBracket();
 
     //----------//
     // Functors //
@@ -71,12 +67,12 @@ public:
     /**
      * See Object::ReplaceDrawingValuesInStaffDef
      */
-    virtual int ReplaceDrawingValuesInStaffDef(FunctorParams *functorParams);
+    int ReplaceDrawingValuesInStaffDef(FunctorParams *functorParams) override;
 
     /**
      * See Object::SetStaffDefRedrawFlags
      */
-    virtual int SetStaffDefRedrawFlags(FunctorParams *functorParams);
+    int SetStaffDefRedrawFlags(FunctorParams *functorParams) override;
 
 private:
     //

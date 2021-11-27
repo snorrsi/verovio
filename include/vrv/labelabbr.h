@@ -29,17 +29,16 @@ public:
     ///@{
     LabelAbbr();
     virtual ~LabelAbbr();
-    virtual Object *Clone() const { return new LabelAbbr(*this); }
-    virtual void Reset();
-    virtual std::string GetClassName() const { return "LabelAbbr"; }
-    virtual ClassId GetClassId() const { return LABELABBR; }
+    Object *Clone() const override { return new LabelAbbr(*this); }
+    void Reset() override;
+    std::string GetClassName() const override { return "LabelAbbr"; }
     ///@}
 
     /**
      * @name Methods for adding allowed content
      */
     ///@{
-    virtual void AddChild(Object *object);
+    bool IsSupportedChild(Object *object) override;
     ///@}
 
     //----------//

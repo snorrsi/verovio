@@ -30,9 +30,9 @@ public:
     ///@{
     Pb();
     virtual ~Pb();
-    virtual void Reset();
-    virtual std::string GetClassName() const { return "Pb"; }
-    virtual ClassId GetClassId() const { return PB; }
+    Object *Clone() const override { return new Pb(*this); }
+    void Reset() override;
+    std::string GetClassName() const override { return "Pb"; }
     ///@}
 
     //----------//
@@ -42,7 +42,7 @@ public:
     /**
      * See Object::CastOffEncoding
      */
-    virtual int CastOffEncoding(FunctorParams *functorParams);
+    int CastOffEncoding(FunctorParams *functorParams) override;
 
 private:
     //

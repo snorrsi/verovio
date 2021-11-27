@@ -2,7 +2,7 @@
 // Programmer:    Craig Stuart Sapp <craig@ccrma.stanford.edu>
 // Creation Date: Sat Feb 14 21:55:38 PST 2015
 // Last Modified: Sat Apr 21 10:52:19 PDT 2018 Removed using namespace std;
-// Filename:      midifile/src-library/MidiEventList.cpp
+// Filename:      midifile/src/MidiEventList.cpp
 // Website:       http://midifile.sapp.org
 // Syntax:        C++11
 // vim:           ts=3 noexpandtab
@@ -97,11 +97,21 @@ MidiEvent& MidiEventList::back(void) {
 	return *list.back();
 }
 
+
+const MidiEvent& MidiEventList::back(void) const {
+	return *list.back();
+}
+
 //
 // MidiEventList::last -- Alias for MidiEventList::back().
 //
 
 MidiEvent& MidiEventList::last(void) {
+	return back();
+}
+
+
+const MidiEvent& MidiEventList::last(void) const {
 	return back();
 }
 
@@ -114,6 +124,11 @@ MidiEvent& MidiEventList::last(void) {
 //
 
 MidiEvent& MidiEventList::getEvent(int index) {
+   return *list[index];
+}
+
+
+const MidiEvent& MidiEventList::getEvent(int index) const {
    return *list[index];
 }
 
@@ -277,8 +292,7 @@ int MidiEventList::linkNotePairs(void) {
 	// dimension 3: List of active note-ons or note-offs.
 	std::vector<std::vector<std::vector<MidiEvent*>>> noteons;
 	noteons.resize(16);
-	int i;
-	for (i=0; i<(int)noteons.size(); i++) {
+	for (int i=0; i<(int)noteons.size(); i++) {
 		noteons[i].resize(128);
 	}
 
@@ -353,7 +367,7 @@ int MidiEventList::linkNotePairs(void) {
 	int counter = 0;
 	MidiEvent* mev;
 	MidiEvent* noteon;
-	for (i=0; i<getSize(); i++) {
+	for (int i=0; i<getSize(); i++) {
 		mev = &getEvent(i);
 		mev->unlinkEvent();
 		if (mev->isNoteOn()) {

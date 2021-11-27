@@ -9,6 +9,7 @@
 #define __VRV_HAIRPIN_H__
 
 #include "atts_cmn.h"
+#include "atts_visual.h"
 #include "controlelement.h"
 #include "timeinterface.h"
 
@@ -25,7 +26,8 @@ class Hairpin : public ControlElement,
                 public TimeSpanningInterface,
                 public AttColor,
                 public AttHairpinLog,
-                public AttPlacement,
+                public AttHairpinVis,
+                public AttPlacementRelStaff,
                 public AttVerticalGroup {
 public:
     /**
@@ -35,17 +37,17 @@ public:
     ///@{
     Hairpin();
     virtual ~Hairpin();
-    virtual void Reset();
-    virtual std::string GetClassName() const { return "Hairpin"; }
-    virtual ClassId GetClassId() const { return HAIRPIN; }
+    Object *Clone() const override { return new Hairpin(*this); }
+    void Reset() override;
+    std::string GetClassName() const override { return "Hairpin"; }
     ///@}
 
     /**
      * @name Getter to interfaces
      */
     ///@{
-    virtual TimePointInterface *GetTimePointInterface() { return dynamic_cast<TimePointInterface *>(this); }
-    virtual TimeSpanningInterface *GetTimeSpanningInterface() { return dynamic_cast<TimeSpanningInterface *>(this); }
+    TimePointInterface *GetTimePointInterface() override { return dynamic_cast<TimePointInterface *>(this); }
+    TimeSpanningInterface *GetTimeSpanningInterface() override { return dynamic_cast<TimeSpanningInterface *>(this); }
     ///@}
 
     /**
@@ -70,6 +72,12 @@ public:
     ControlElement *GetRightLink() { return m_rightLink; }
     ///@}
 
+    /**
+     * Get left/right adjustments that needs to be done to the hairpin with set coordinates (leftX, rightX) for it not
+     * to overlap with parent measure's barlines
+     */
+    std::pair<int, int> GetBarlineOverlapAdjustment(int doubleUnit, int leftX, int rightX, int spanningType);
+
     //----------//
     // Functors //
     //----------//
@@ -77,12 +85,12 @@ public:
     /**
      * See Object::PrepareFloatingGrps
      */
-    virtual int PrepareFloatingGrps(FunctorParams *functoParams);
+    int PrepareFloatingGrps(FunctorParams *functorParams) override;
 
     /**
      * See Object::ResetDrawing
      */
-    virtual int ResetDrawing(FunctorParams *functorParams);
+    int ResetDrawing(FunctorParams *functorParams) override;
 
 protected:
     //

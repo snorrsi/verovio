@@ -10,15 +10,16 @@
 //----------------------------------------------------------------------------
 
 #include <assert.h>
+#include <math.h>
 
 //----------------------------------------------------------------------------
 
-#include "app.h"
 #include "annot.h"
-#include "attcomparison.h"
+#include "app.h"
 #include "beam.h"
 #include "choice.h"
 #include "clef.h"
+#include "comparison.h"
 #include "controlelement.h"
 #include "devicecontext.h"
 #include "doc.h"
@@ -28,6 +29,7 @@
 #include "fb.h"
 #include "fig.h"
 #include "functorparams.h"
+#include "glyph.h"
 #include "keysig.h"
 #include "label.h"
 #include "labelabbr.h"
@@ -39,6 +41,9 @@
 #include "note.h"
 #include "options.h"
 #include "page.h"
+#include "pageboundary.h"
+#include "pageelement.h"
+#include "reh.h"
 #include "smufl.h"
 #include "staff.h"
 #include "staffdef.h"
@@ -62,17 +67,21 @@ void View::DrawCurrentPage(DeviceContext *dc, bool background)
 
     m_currentPage = m_doc->SetDrawingPage(m_pageIdx);
 
-    int i;
-
     // Keep the width of the initial scoreDef
     SetScoreDefDrawingWidth(dc, &m_currentPage->m_drawingScoreDef);
 
     // Set the current score def to the page one
-    // The page one has previously been set by Object::SetCurrentScoreDef
+    // The page one has previously been set by Object::ScoreDefSetCurrent
     m_drawingScoreDef = m_currentPage->m_drawingScoreDef;
 
-    if (background) dc->DrawRectangle(0, 0, m_doc->m_drawingPageWidth, m_doc->m_drawingPageHeight);
+    if (m_options->m_shrinkToFit.GetValue()) {
+        dc->SetContentHeight(m_doc->GetAdjustedDrawingPageHeight());
+    }
+    else {
+        dc->SetContentHeight(dc->GetHeight());
+    }
 
+    // if (background) dc->DrawRectangle(0, 0, m_doc->m_drawingPageWidth, m_doc->m_drawingPageHeight);
     dc->DrawBackgroundImage();
 
     Point origin = dc->GetLogicalOrigin();
@@ -80,10 +89,18 @@ void View::DrawCurrentPage(DeviceContext *dc, bool background)
 
     dc->StartPage();
 
-    for (i = 0; i < m_currentPage->GetSystemCount(); ++i) {
-        // cast to System check in DrawSystem
-        System *system = dynamic_cast<System *>(m_currentPage->GetChild(i));
-        DrawSystem(dc, system);
+    for (auto child : *m_currentPage->GetChildren()) {
+        if (child->IsPageElement()) {
+            // cast to PageElement check in DrawSystemEditorial element
+            DrawPageElement(dc, dynamic_cast<PageElement *>(child));
+        }
+        else if (child->Is(SYSTEM)) {
+            System *system = dynamic_cast<System *>(child);
+            DrawSystem(dc, system);
+        }
+        else {
+            assert(false);
+        }
     }
 
     DrawRunningElements(dc, m_currentPage);
@@ -107,22 +124,20 @@ void View::SetScoreDefDrawingWidth(DeviceContext *dc, ScoreDef *scoreDef)
 
     // key signature of the scoreDef
     if (scoreDef->HasKeySigInfo()) {
-        KeySig *keySig = scoreDef->GetKeySigCopy();
+        KeySig *keySig = scoreDef->GetKeySig();
         assert(keySig);
-        numAlteration = (keySig->GetAlterationNumber() > numAlteration) ? keySig->GetAlterationNumber() : numAlteration;
-        delete keySig;
+        numAlteration = (keySig->GetAccidCount() > numAlteration) ? keySig->GetAccidCount() : numAlteration;
     }
 
     // longest key signature of the staffDefs
-    const ListOfObjects *scoreDefList = scoreDef->GetList(scoreDef); // make sure it's initialized
-    for (ListOfObjects::const_iterator it = scoreDefList->begin(); it != scoreDefList->end(); ++it) {
-        StaffDef *staffDef = dynamic_cast<StaffDef *>(*it);
+    const ArrayOfObjects *scoreDefList = scoreDef->GetList(scoreDef); // make sure it's initialized
+    for (ArrayOfObjects::const_iterator it = scoreDefList->begin(); it != scoreDefList->end(); ++it) {
+        StaffDef *staffDef = vrv_cast<StaffDef *>(*it);
         assert(staffDef);
         if (!staffDef->HasKeySigInfo()) continue;
-        KeySig *keySig = staffDef->GetKeySigCopy();
+        KeySig *keySig = staffDef->GetKeySig();
         assert(keySig);
-        numAlteration = (keySig->GetAlterationNumber() > numAlteration) ? keySig->GetAlterationNumber() : numAlteration;
-        delete keySig;
+        numAlteration = (keySig->GetAccidCount() > numAlteration) ? keySig->GetAccidCount() : numAlteration;
     }
 
     int width = 0;
@@ -138,6 +153,30 @@ void View::SetScoreDefDrawingWidth(DeviceContext *dc, ScoreDef *scoreDef)
     scoreDef->SetDrawingWidth(width);
 }
 
+void View::DrawPageElement(DeviceContext *dc, PageElement *element)
+{
+    assert(dc);
+    assert(element);
+
+    if (element->Is(PAGE_ELEMENT_END)) {
+        PageElementEnd *elementEnd = vrv_cast<PageElementEnd *>(element);
+        assert(elementEnd);
+        assert(elementEnd->GetStart());
+        dc->StartGraphic(element, elementEnd->GetStart()->GetUuid(), element->GetUuid());
+        dc->EndGraphic(element, this);
+    }
+    else if (element->Is(MDIV)) {
+        // When the mdiv is not visible, then there is no start / end element
+        std::string elementStart = (element->IsBoundaryElement()) ? "pageElementStart" : "";
+        dc->StartGraphic(element, elementStart, element->GetUuid());
+        dc->EndGraphic(element, this);
+    }
+    else if (element->Is(SCORE)) {
+        dc->StartGraphic(element, "pageElementStart", element->GetUuid());
+        dc->EndGraphic(element, this);
+    }
+}
+
 //----------------------------------------------------------------------------
 // View - System
 //----------------------------------------------------------------------------
@@ -149,24 +188,15 @@ void View::DrawSystem(DeviceContext *dc, System *system)
 
     dc->StartGraphic(system, "", system->GetUuid());
 
-    // Draw system divider (from the second one) if scoreDef is optimized
-    if ((system->GetIdx() > 0) && system->IsDrawingOptimized()) {
-        int x1 = system->GetDrawingX() - m_doc->GetDrawingUnit(100) * 3;
-        int y1 = system->GetDrawingY() - m_doc->GetDrawingUnit(100) * 1;
-        int x2 = system->GetDrawingX() + m_doc->GetDrawingUnit(100) * 3;
-        int y2 = system->GetDrawingY() + m_doc->GetDrawingUnit(100) * 3;
-        DrawObliquePolygon(dc, x1, y1, x2, y2, m_doc->GetDrawingUnit(100) * 1.5);
-        y1 += m_doc->GetDrawingUnit(100) * 2;
-        y2 += m_doc->GetDrawingUnit(100) * 2;
-        DrawObliquePolygon(dc, x1, y1, x2, y2, m_doc->GetDrawingUnit(100) * 1.5);
-    }
+    Measure *firstMeasure = dynamic_cast<Measure *>(system->FindDescendantByType(MEASURE, 1));
+
+    DrawSystemDivider(dc, system, firstMeasure);
 
     // first we need to clear the drawing list of postponed elements
     system->ResetDrawingList();
 
-    Measure *systemStart = dynamic_cast<Measure *>(system->FindChildByType(MEASURE));
-    if (systemStart) {
-        DrawScoreDef(dc, system->GetDrawingScoreDef(), systemStart, system->GetDrawingX(), NULL);
+    if (firstMeasure) {
+        DrawScoreDef(dc, system->GetDrawingScoreDef(), firstMeasure, system->GetDrawingX(), NULL);
     }
 
     DrawSystemChildren(dc, system, system);
@@ -175,10 +205,15 @@ void View::DrawSystem(DeviceContext *dc, System *system)
     DrawSystemList(dc, system, BRACKETSPAN);
     DrawSystemList(dc, system, DYNAM);
     DrawSystemList(dc, system, DIR);
+    DrawSystemList(dc, system, GLISS);
     DrawSystemList(dc, system, HAIRPIN);
     DrawSystemList(dc, system, TRILL);
     DrawSystemList(dc, system, FIGURE);
+    DrawSystemList(dc, system, LV);
+    DrawSystemList(dc, system, PHRASE);
     DrawSystemList(dc, system, OCTAVE);
+    DrawSystemList(dc, system, PEDAL);
+    DrawSystemList(dc, system, PITCHINFLECTION);
     DrawSystemList(dc, system, TIE);
     DrawSystemList(dc, system, SLUR);
     DrawSystemList(dc, system, ENDING);
@@ -191,8 +226,8 @@ void View::DrawSystemList(DeviceContext *dc, System *system, const ClassId class
     assert(dc);
     assert(system);
 
-    ListOfObjects *drawingList = system->GetDrawingList();
-    ListOfObjects::iterator iter;
+    ArrayOfObjects *drawingList = system->GetDrawingList();
+    ArrayOfObjects::iterator iter;
 
     for (iter = drawingList->begin(); iter != drawingList->end(); ++iter) {
         if ((*iter)->Is(classId) && (classId == BRACKETSPAN)) {
@@ -207,10 +242,25 @@ void View::DrawSystemList(DeviceContext *dc, System *system, const ClassId class
         if ((*iter)->Is(classId) && (classId == FIGURE)) {
             DrawTimeSpanningElement(dc, *iter, system);
         }
+        if ((*iter)->Is(classId) && (classId == GLISS)) {
+            DrawTimeSpanningElement(dc, *iter, system);
+        }
         if ((*iter)->Is(classId) && (classId == HAIRPIN)) {
             DrawTimeSpanningElement(dc, *iter, system);
         }
+        if ((*iter)->Is(classId) && (classId == LV)) {
+            DrawTimeSpanningElement(dc, *iter, system);
+        }
+        if ((*iter)->Is(classId) && (classId == PHRASE)) {
+            DrawTimeSpanningElement(dc, *iter, system);
+        }
         if ((*iter)->Is(classId) && (classId == OCTAVE)) {
+            DrawTimeSpanningElement(dc, *iter, system);
+        }
+        if ((*iter)->Is(classId) && (classId == PEDAL)) {
+            DrawTimeSpanningElement(dc, *iter, system);
+        }
+        if ((*iter)->Is(classId) && (classId == PITCHINFLECTION)) {
             DrawTimeSpanningElement(dc, *iter, system);
         }
         if ((*iter)->Is(classId) && (classId == SYL)) {
@@ -240,7 +290,7 @@ void View::DrawScoreDef(
     // we need at least one measure to be able to draw the groups - we need access to the staff elements,
     assert(measure);
 
-    StaffGrp *staffGrp = dynamic_cast<StaffGrp *>(scoreDef->FindChildByType(STAFFGRP));
+    StaffGrp *staffGrp = dynamic_cast<StaffGrp *>(scoreDef->FindDescendantByType(STAFFGRP));
     if (!staffGrp) {
         return;
     }
@@ -248,10 +298,6 @@ void View::DrawScoreDef(
     if (barLine == NULL) {
         // Draw the first staffGrp and from there its children recursively
         DrawStaffGrp(dc, measure, staffGrp, x, true, !scoreDef->DrawLabels());
-
-        DrawStaffDefLabels(dc, measure, scoreDef, !scoreDef->DrawLabels());
-        // if this was true (non-abbreviated labels), set it to false for next one
-        // scoreDef->SetDrawLabels(false);
     }
     else {
         dc->StartGraphic(barLine, "", barLine->GetUuid());
@@ -273,34 +319,7 @@ void View::DrawStaffGrp(
         return;
     }
 
-    TextExtend extend;
-
-    const ListOfObjects *staffDefs = staffGrp->GetList(staffGrp);
-    if (staffDefs->empty()) {
-        return;
-    }
-
-    StaffDef *firstDef = NULL;
-    ListOfObjects::const_iterator iter;
-    for (iter = staffDefs->begin(); iter != staffDefs->end(); iter++) {
-        StaffDef *staffDef = dynamic_cast<StaffDef *>(*iter);
-        assert(staffDef);
-        if (staffDef->GetDrawingVisibility() != OPTIMIZATION_HIDDEN) {
-            firstDef = staffDef;
-            break;
-        }
-    }
-
-    StaffDef *lastDef = NULL;
-    ListOfObjects::const_reverse_iterator riter;
-    for (riter = staffDefs->rbegin(); riter != staffDefs->rend(); riter++) {
-        StaffDef *staffDef = dynamic_cast<StaffDef *>(*riter);
-        assert(staffDef);
-        if (staffDef->GetDrawingVisibility() != OPTIMIZATION_HIDDEN) {
-            lastDef = staffDef;
-            break;
-        }
-    }
+    auto [firstDef, lastDef] = staffGrp->GetFirstLastStaffDef();
 
     // Get the first and last staffDef of the staffGrp
     if (!firstDef || !lastDef) {
@@ -310,9 +329,9 @@ void View::DrawStaffGrp(
 
     // Get the corresponding staff looking at the previous (or first) measure
     AttNIntegerComparison comparisonFirst(STAFF, firstDef->GetN());
-    Staff *first = dynamic_cast<Staff *>(measure->FindChildByComparison(&comparisonFirst, 1));
+    Staff *first = dynamic_cast<Staff *>(measure->FindDescendantByComparison(&comparisonFirst, 1));
     AttNIntegerComparison comparisonLast(STAFF, lastDef->GetN());
-    Staff *last = dynamic_cast<Staff *>(measure->FindChildByComparison(&comparisonLast, 1));
+    Staff *last = dynamic_cast<Staff *>(measure->FindDescendantByComparison(&comparisonLast, 1));
 
     if (!first || !last) {
         LogDebug(
@@ -320,120 +339,168 @@ void View::DrawStaffGrp(
         return;
     }
 
+    int staffSize = staffGrp->GetMaxStaffSize();
     int yTop = first->GetDrawingY();
     // for the bottom position we need to take into account the number of lines and the staff size
     int yBottom
         = last->GetDrawingY() - (lastDef->GetLines() - 1) * m_doc->GetDrawingDoubleUnit(last->m_drawingStaffSize);
-    int barLineWidth = m_doc->GetDrawingBarLineWidth(100);
+    // adjust to single line staves
+    if (firstDef->GetLines() <= 1) yTop += m_doc->GetDrawingDoubleUnit(last->m_drawingStaffSize);
+    if (lastDef->GetLines() <= 1) yBottom -= m_doc->GetDrawingDoubleUnit(last->m_drawingStaffSize);
 
-    // adjust the top and bottom according to staffline width
-    x += barLineWidth / 2;
-    
-    // HARDCODED
-    int space = 4 * m_doc->GetDrawingBeamWidth(100, false);
-    int xLabel = x - space;
-    int yLabel = yBottom - (yBottom - yTop) / 2 - m_doc->GetDrawingUnit(100);
-    
-    System *system = dynamic_cast<System *>(measure->GetFirstParent(SYSTEM));
-    
-    this->DrawLabels(dc, measure, system, staffGrp, xLabel, yLabel, abbreviations, 100, space);
-
-    // actually draw the line, the brace or the bracket
-    if (topStaffGrp && ((firstDef != lastDef) || (staffGrp->GetSymbol() != staffGroupingSym_SYMBOL_NONE))) {
-        DrawVerticalLine(dc, yTop, yBottom, x, barLineWidth);
+    // draw the system start bar line
+    if (topStaffGrp
+        && ((((firstDef != lastDef) || staffGrp->GetFirst(GRPSYM))
+                && (m_doc->GetCurrentScoreDef()->GetSystemLeftline() != BOOLEAN_false))
+            || (m_doc->GetCurrentScoreDef()->GetSystemLeftline() == BOOLEAN_true))) {
+        // int barLineWidth = m_doc->GetDrawingElementDefaultSize("bracketThickness", staffSize);
+        const int barLineWidth = m_doc->GetDrawingBarLineWidth(staffSize);
+        DrawVerticalLine(dc, yTop, yBottom, x + barLineWidth / 2, barLineWidth);
     }
-    // this will need to be changed with the next version of MEI will line means additional thick line
-    if (staffGrp->GetSymbol() == staffGroupingSym_SYMBOL_line) {
-        DrawVerticalLine(dc, yTop, yBottom, x, barLineWidth);
-    }
-    else if (staffGrp->GetSymbol() == staffGroupingSym_SYMBOL_brace) {
-        DrawBrace(dc, x, yTop, yBottom, last->m_drawingStaffSize);
-    }
-    else if (staffGrp->GetSymbol() == staffGroupingSym_SYMBOL_bracket) {
-        DrawBracket(dc, x, yTop, yBottom, last->m_drawingStaffSize);
-        x -= 2 * m_doc->GetDrawingBeamWidth(100, false) - m_doc->GetDrawingBeamWhiteWidth(100, false);
-    }
+    // draw the group symbol
+    int staffGrpX = x;
+    DrawGrpSym(dc, measure, staffGrp, x);
+    int grpSymSpace = staffGrpX - x;
 
     // recursively draw the children
-    int i;
     StaffGrp *childStaffGrp = NULL;
-    for (i = 0; i < staffGrp->GetChildCount(); ++i) {
+    for (int i = 0; i < staffGrp->GetChildCount(); ++i) {
         childStaffGrp = dynamic_cast<StaffGrp *>(staffGrp->GetChild(i));
         if (childStaffGrp) {
             DrawStaffGrp(dc, measure, childStaffGrp, x, false, abbreviations);
         }
     }
+
+    // DrawStaffGrpLabel
+    ScoreDef *scoreDef = dynamic_cast<ScoreDef *>(staffGrp->GetFirstAncestor(SCOREDEF));
+    const int space = m_doc->GetDrawingDoubleUnit(staffGrp->GetMaxStaffSize());
+    int xLabel = x - space;
+    int yLabel = yBottom - (yBottom - yTop) / 2 - m_doc->GetDrawingUnit(100);
+    this->DrawLabels(dc, scoreDef, staffGrp, xLabel, yLabel, abbreviations, 100, 2 * space + grpSymSpace);
+
+    DrawStaffDefLabels(dc, measure, staffGrp, x, abbreviations);
 }
 
-void View::DrawStaffDefLabels(DeviceContext *dc, Measure *measure, ScoreDef *scoreDef, bool abbreviations)
+void View::DrawStaffDefLabels(DeviceContext *dc, Measure *measure, StaffGrp *staffGrp, int x, bool abbreviations)
 {
     assert(dc);
     assert(measure);
-    assert(scoreDef);
+    assert(staffGrp);
 
-    //SS do not draw any labels.
-    return;
-    
-    const ListOfObjects *scoreDefChildren = scoreDef->GetList(scoreDef);
-    ListOfObjects::const_iterator iter = scoreDefChildren->begin();
-    while (iter != scoreDefChildren->end()) {
-        StaffDef *staffDef = dynamic_cast<StaffDef *>(*iter);
+    bool skipLabels = false;
+#ifdef SS_NO_LABELS
+    skipLabels = true;
+#endif
+    if (skipLabels) {
+        return;
+    }
+
+    StaffDef *staffDef = NULL;
+    for (int i = 0; i < staffGrp->GetChildCount(); ++i) {
+        staffDef = dynamic_cast<StaffDef *>(staffGrp->GetChild(i));
 
         if (!staffDef) {
-            LogDebug("Should be staffDef in View::DrawStaffDefLabels");
-            ++iter;
             continue;
         }
 
         AttNIntegerComparison comparison(STAFF, staffDef->GetN());
-        Staff *staff = dynamic_cast<Staff *>(measure->FindChildByComparison(&comparison, 1));
-        System *system = dynamic_cast<System *>(measure->GetFirstParent(SYSTEM));
+        Staff *staff = dynamic_cast<Staff *>(measure->FindDescendantByComparison(&comparison, 1));
+        ScoreDef *scoreDef = dynamic_cast<ScoreDef *>(staffGrp->GetFirstAncestor(SCOREDEF));
 
-        if (!staff || !system) {
-            LogDebug("Staff or System missing in View::DrawStaffDefLabels");
-            ++iter;
+        if (!staff || !scoreDef) {
+            LogDebug("Staff or ScoreDef missing in View::DrawStaffDefLabels");
             continue;
         }
 
         if (!staff->DrawingIsVisible()) {
-            ++iter;
             continue;
         }
-        
-        // HARDCODED
-        int space = 3 * m_doc->GetDrawingBeamWidth(100, false);
-        if (staffDef->IsInBraceAndBracket()) {
-            space *= 2;
-        }
-        int x = system->GetDrawingX() - space;
-        int y = staff->GetDrawingY()
-        - (staffDef->GetLines() * m_doc->GetDrawingDoubleUnit(staff->m_drawingStaffSize) / 2);
-        
-        this->DrawLabels(dc, measure, system, staffDef, x, y, abbreviations, staff->m_drawingStaffSize, space);
 
-        ++iter;
+        // HARDCODED
+        int space = m_doc->GetDrawingDoubleUnit(staffGrp->GetMaxStaffSize());
+        int y = staff->GetDrawingY()
+            - (staffDef->GetLines() * m_doc->GetDrawingDoubleUnit(staff->m_drawingStaffSize) / 2);
+
+        this->DrawLabels(dc, scoreDef, staffDef, x - space, y, abbreviations, staff->m_drawingStaffSize, 2 * space);
     }
 }
-    
-void View::DrawLabels(DeviceContext *dc, Measure *measure, System *system, Object *object, int x, int y, bool abbreviations, int staffSize, int space)
+
+void View::DrawGrpSym(DeviceContext *dc, Measure *measure, StaffGrp *staffGrp, int &x)
+{
+    // draw the group symbol
+    GrpSym *groupSymbol = vrv_cast<GrpSym *>(staffGrp->GetGroupSymbol());
+    if (!groupSymbol) return;
+
+    // Get the corresponding staff looking at the previous (or first) measure
+    AttNIntegerComparison comparisonFirst(STAFF, groupSymbol->GetStartDef()->GetN());
+    Staff *first = dynamic_cast<Staff *>(measure->FindDescendantByComparison(&comparisonFirst, 1));
+    AttNIntegerComparison comparisonLast(STAFF, groupSymbol->GetEndDef()->GetN());
+    Staff *last = dynamic_cast<Staff *>(measure->FindDescendantByComparison(&comparisonLast, 1));
+
+    if (!first || !last) {
+        LogDebug("Could not get staff (%d; %d) while drawing staffGrp - DrawStaffGrp",
+            groupSymbol->GetStartDef()->GetN(), groupSymbol->GetEndDef()->GetN());
+        return;
+    }
+
+    dc->StartGraphic(groupSymbol, "", groupSymbol->GetUuid());
+
+    const int staffSize = staffGrp->GetMaxStaffSize();
+    int yTop = first->GetDrawingY();
+    // for the bottom position we need to take into account the number of lines and the staff size
+    int yBottom = last->GetDrawingY()
+        - (groupSymbol->GetEndDef()->GetLines() - 1) * m_doc->GetDrawingDoubleUnit(last->m_drawingStaffSize);
+    // for the bottom position we need to take into account the number of lines and the staff size
+    if (groupSymbol->GetStartDef()->GetLines() <= 1) yTop += m_doc->GetDrawingDoubleUnit(last->m_drawingStaffSize);
+    if (groupSymbol->GetEndDef()->GetLines() <= 1) yBottom -= m_doc->GetDrawingDoubleUnit(last->m_drawingStaffSize);
+
+    switch (groupSymbol->GetSymbol()) {
+        case staffGroupingSym_SYMBOL_line: {
+            const int lineWidth = m_doc->GetDrawingUnit(staffSize) * m_options->m_bracketThickness.GetValue();
+            DrawVerticalLine(dc, yTop, yBottom, x - 1.5 * lineWidth, lineWidth);
+            x -= 2 * lineWidth;
+            break;
+        }
+        case staffGroupingSym_SYMBOL_brace: {
+            DrawBrace(dc, x, yTop, yBottom, staffSize);
+            x -= 2.5 * m_doc->GetDrawingUnit(staffSize);
+            break;
+        }
+        case staffGroupingSym_SYMBOL_bracket: {
+            DrawBracket(dc, x, yTop, yBottom, staffSize);
+            x -= m_doc->GetDrawingUnit(staffSize) * (1.0 + m_options->m_bracketThickness.GetValue());
+            break;
+        }
+        case staffGroupingSym_SYMBOL_bracketsq: {
+            DrawBracketSq(dc, x, yTop, yBottom, staffSize);
+            x -= m_doc->GetDrawingUnit(staffSize);
+            break;
+        }
+        default: break;
+    }
+
+    dc->EndGraphic(groupSymbol, this);
+}
+
+void View::DrawLabels(
+    DeviceContext *dc, ScoreDef *scoreDef, Object *object, int x, int y, bool abbreviations, int staffSize, int space)
 {
     assert(dc);
-    assert(measure);
-    assert(system);
-    assert(object->Is({STAFFDEF, STAFFGRP}));
-    
-    Label *label = dynamic_cast<Label *>(object->FindChildByType(LABEL, 1));
-    LabelAbbr *labelAbbr = dynamic_cast<LabelAbbr *>(object->FindChildByType(LABELABBR, 1));
+    assert(scoreDef);
+    assert(object->Is({ STAFFDEF, STAFFGRP }));
+
+    Label *label = dynamic_cast<Label *>(object->FindDescendantByType(LABEL, 1));
+    LabelAbbr *labelAbbr = dynamic_cast<LabelAbbr *>(object->FindDescendantByType(LABELABBR, 1));
     Object *graphic = label;
-    
+
     std::wstring labelStr = (label) ? label->GetText(label) : L"";
     std::wstring labelAbbrStr = (labelAbbr) ? labelAbbr->GetText(labelAbbr) : L"";
-    
+
     if (abbreviations) {
         labelStr = labelAbbrStr;
         graphic = labelAbbr;
     }
-    
+
     if (!graphic || (labelStr.length() == 0)) {
         return;
     }
@@ -443,7 +510,7 @@ void View::DrawLabels(DeviceContext *dc, Measure *measure, System *system, Objec
         labelTxt.SetFaceName("Times");
     }
     labelTxt.SetPointSize(m_doc->GetDrawingLyricFont(staffSize)->GetPointSize());
-    
+
     int lineCount = graphic->GetChildCount(LB) + 1;
     if (lineCount > 1) {
         y += (m_doc->GetTextLineHeight(&labelTxt, false) * (lineCount - 1) / 2);
@@ -453,22 +520,22 @@ void View::DrawLabels(DeviceContext *dc, Measure *measure, System *system, Objec
     params.m_x = x;
     params.m_y = y;
     params.m_pointSize = labelTxt.GetPointSize();
-    
+
     dc->SetBrush(m_currentColour, AxSOLID);
     dc->SetFont(&labelTxt);
-    
+
     dc->StartGraphic(graphic, "", graphic->GetUuid());
-    
+
     dc->StartText(ToDeviceContextX(params.m_x), ToDeviceContextY(params.m_y), HORIZONTALALIGNMENT_right);
     DrawTextChildren(dc, graphic, params);
     dc->EndText();
-    
+
     dc->EndGraphic(graphic, this);
-    
+
     // keep the widest width for the system - careful: this can be the label OR labelAbbr
-    system->SetDrawingLabelsWidth(graphic->GetContentX2() - graphic->GetContentX1() + space);
+    scoreDef->SetDrawingLabelsWidth(graphic->GetContentX2() - graphic->GetContentX1() + space);
     // also store in the system the maximum width with abbreviations for justification
-    if (!abbreviations && (labelAbbrStr.length() > 0)) {
+    if (labelAbbr && !abbreviations && (labelAbbrStr.length() > 0)) {
         TextExtend extend;
         std::vector<std::wstring> lines;
         labelAbbr->GetTextLines(labelAbbr, lines);
@@ -477,9 +544,11 @@ void View::DrawLabels(DeviceContext *dc, Measure *measure, System *system, Objec
             dc->GetTextExtent(line, &extend, true);
             maxLength = (extend.m_width > maxLength) ? extend.m_width : maxLength;
         }
+        System *system = vrv_cast<System *>(scoreDef->GetFirstAncestor(SYSTEM));
+        assert(system);
         system->SetDrawingAbbrLabelsWidth(maxLength + space);
     }
-    
+
     dc->ResetFont();
     dc->ResetBrush();
 }
@@ -488,44 +557,72 @@ void View::DrawBracket(DeviceContext *dc, int x, int y1, int y2, int staffSize)
 {
     assert(dc);
 
-    int x1, x2;
+    const int offset = m_doc->GetDrawingStaffLineWidth(staffSize) / 2;
+    const int basicDist = m_doc->GetDrawingUnit(staffSize);
 
-    x2 = x - m_doc->GetDrawingBeamWidth(100, false);
-    x1 = x2 - m_doc->GetDrawingBeamWidth(100, false);
+    const int bracketThickness = m_doc->GetDrawingUnit(staffSize) * m_options->m_bracketThickness.GetValue();
 
-    DrawSmuflCode(dc, x1, y1, SMUFL_E003_bracketTop, staffSize, false);
-    DrawSmuflCode(dc, x1, y2, SMUFL_E004_bracketBottom, staffSize, false);
+    const int x2 = x - basicDist;
+    const int x1 = x2 - bracketThickness;
 
-    // adjust to top and bottom position so we make sure there is no white space between
-    // the glyphs and the line
-    y1 += m_doc->GetDrawingStemWidth(100);
-    y2 -= m_doc->GetDrawingStemWidth(100);
-    DrawFilledRectangle(dc, x1, y1, x2, y2);
+    DrawSmuflCode(dc, x1, y1 + offset + bracketThickness / 2, SMUFL_E003_bracketTop, staffSize, false);
+    DrawSmuflCode(dc, x1, y2 - offset - bracketThickness / 2, SMUFL_E004_bracketBottom, staffSize, false);
 
-    return;
+    DrawFilledRectangle(dc, x1, y1 + 2 * offset + bracketThickness / 2, x2, y2 - 2 * offset - bracketThickness / 2);
+}
+
+void View::DrawBracketSq(DeviceContext *dc, int x, int y1, int y2, int staffSize)
+{
+    assert(dc);
+
+    const int y = std::min(y1, y2);
+    const int height = std::abs(y2 - y1);
+    const int horizontalThickness = m_doc->GetDrawingStaffLineWidth(staffSize);
+    const int verticalThickness = m_doc->GetDrawingUnit(staffSize) * m_options->m_subBracketThickness.GetValue();
+    const int width = m_doc->GetDrawingUnit(staffSize);
+
+    DrawSquareBracket(dc, true, x - width, y, height, width, horizontalThickness, verticalThickness);
 }
 
 void View::DrawBrace(DeviceContext *dc, int x, int y1, int y2, int staffSize)
 {
     assert(dc);
 
+    const int basicDist = m_doc->GetDrawingUnit(staffSize);
+
+    x -= basicDist;
+
+    if (m_doc->GetOptions()->m_useBraceGlyph.GetValue()) {
+        FontInfo *font = m_doc->GetDrawingSmuflFont(staffSize, false);
+        const int width = m_doc->GetGlyphWidth(SMUFL_E000_brace, staffSize, false);
+        const int height = 8 * m_doc->GetDrawingUnit(staffSize);
+        const float scale = static_cast<float>(y1 - y2) / height;
+        // We want the brace width always to be 2 units
+        const int braceWidth = m_doc->GetDrawingDoubleUnit(staffSize);
+        x -= braceWidth;
+        const float currentWidthToHeightRatio = font->GetWidthToHeightRatio();
+        const float widthAfterScalling = width * scale;
+        font->SetWidthToHeightRatio(static_cast<float>(braceWidth) / widthAfterScalling);
+        dc->StartCustomGraphic("grpSym");
+        DrawSmuflCode(dc, x, y2, SMUFL_E000_brace, staffSize * scale, false);
+        dc->EndCustomGraphic();
+        font->SetWidthToHeightRatio(currentWidthToHeightRatio);
+        return;
+    }
     // int new_coords[2][6];
     Point points[4];
     Point bez1[4];
     Point bez2[4];
 
-    int penWidth = m_doc->GetDrawingStemWidth(100);
+    const int penWidth = m_doc->GetDrawingStemWidth(staffSize);
     y1 -= penWidth;
     y2 += penWidth;
+    x += penWidth;
     BoundingBox::Swap(y1, y2);
 
-    int ymed, xdec, fact;
-
-    x -= m_doc->GetDrawingBeamWhiteWidth(staffSize, false); // distance entre barre et debut accolade
-
-    ymed = (y1 + y2) / 2;
-    fact = m_doc->GetDrawingBeamWhiteWidth(staffSize, false) + m_doc->GetDrawingStemWidth(100);
-    xdec = ToDeviceContextX(fact);
+    const int fact = m_doc->GetDrawingBeamWhiteWidth(staffSize, false) + m_doc->GetDrawingStemWidth(staffSize);
+    const int xdec = ToDeviceContextX(fact);
+    const int ymed = (y1 + y2) / 2;
 
     points[0].x = ToDeviceContextX(x);
     points[0].y = ToDeviceContextY(y1);
@@ -552,7 +649,7 @@ void View::DrawBrace(DeviceContext *dc, int x, int y1, int y2, int staffSize)
     dc->SetPen(m_currentColour, std::max(1, penWidth), AxSOLID);
     dc->SetBrush(m_currentColour, AxSOLID);
 
-    dc->DrawComplexBezierPath(bez1, bez2);
+    dc->DrawCubicBezierPathFilled(bez1, bez2);
 
     // on produit l'image reflet vers le bas: 0 est identique
     points[0].y = ToDeviceContextY(y2);
@@ -573,7 +670,7 @@ void View::DrawBrace(DeviceContext *dc, int x, int y1, int y2, int staffSize)
     bez2[2] = points[2];
     bez2[3] = points[3];
 
-    dc->DrawComplexBezierPath(bez1, bez2);
+    dc->DrawCubicBezierPathFilled(bez1, bez2);
 
     dc->ResetPen();
     dc->ResetBrush();
@@ -601,19 +698,52 @@ void View::DrawBarLines(DeviceContext *dc, Measure *measure, StaffGrp *staffGrp,
             childStaffGrp = dynamic_cast<StaffGrp *>(staffGrp->GetChild(i));
             childStaffDef = dynamic_cast<StaffDef *>(staffGrp->GetChild(i));
             if (childStaffGrp) {
+                if (childStaffGrp->GetDrawingVisibility() == OPTIMIZATION_HIDDEN) {
+                    continue;
+                }
                 DrawBarLines(dc, measure, childStaffGrp, barLine, isLastMeasure);
             }
             else if (childStaffDef) {
+                if (childStaffDef->GetDrawingVisibility() == OPTIMIZATION_HIDDEN) {
+                    continue;
+                }
                 AttNIntegerComparison comparison(STAFF, childStaffDef->GetN());
-                Staff *staff = dynamic_cast<Staff *>(measure->FindChildByComparison(&comparison, 1));
+                Staff *staff = dynamic_cast<Staff *>(measure->FindDescendantByComparison(&comparison, 1));
                 if (!staff) {
                     LogDebug("Could not get staff (%d) while drawing staffGrp - DrawBarLines", childStaffDef->GetN());
                     continue;
                 }
-                int yTop = staff->GetDrawingY();
+                if (staff->GetVisible() == BOOLEAN_false) {
+                    continue;
+                }
+                // Get current form. If neighboring invisible staff make sure that at least some kind of barline is
+                // drawn
+                data_BARRENDITION form = barLine->GetForm();
+                if (measure->HasInvisibleStaffBarlines()) {
+                    data_BARRENDITION barlineRend = (barLine->GetPosition() == BarLinePosition::Right)
+                        ? measure->GetDrawingRightBarLineByStaffN(childStaffDef->GetN())
+                        : measure->GetDrawingLeftBarLineByStaffN(childStaffDef->GetN());
+                    if (barlineRend != BARRENDITION_NONE) form = barlineRend;
+                }
+                if (form == BARRENDITION_NONE) continue;
+
                 // for the bottom position we need to take into account the number of lines and the staff size
                 int yBottom = staff->GetDrawingY()
                     - (childStaffDef->GetLines() - 1) * m_doc->GetDrawingDoubleUnit(staff->m_drawingStaffSize);
+                if (measure->HasBarPlace()) {
+                    // bar.place counts upwards (note order).
+                    yBottom += measure->GetBarPlace() * m_doc->GetDrawingUnit(staff->m_drawingStaffSize);
+                }
+                int yTop = staff->GetDrawingY();
+                if (measure->HasBarLen()) {
+                    yTop = yBottom + (measure->GetBarLen() * m_doc->GetDrawingUnit(staff->m_drawingStaffSize));
+                }
+                // Make sure barlines are visible with a single line
+                if (childStaffDef->GetLines() <= 1) {
+                    yTop = yBottom + m_doc->GetDrawingDoubleUnit(staff->m_drawingStaffSize);
+                    yBottom -= m_doc->GetDrawingDoubleUnit(staff->m_drawingStaffSize);
+                }
+#ifdef SS_STAFFLINE_1_AS_5
                 //SS . Hard fix 1 staff line for now 5 lines to get barline
                 int lineCount = childStaffDef->GetLines();
                 if (lineCount == 1) {
@@ -622,24 +752,25 @@ void View::DrawBarLines(DeviceContext *dc, Measure *measure, StaffGrp *staffGrp,
                     yBottom = staff->GetDrawingY()
                         - (3 - 1) * m_doc->GetDrawingDoubleUnit(staff->m_drawingStaffSize);
                 }
-                
-                DrawBarLine(dc, yTop, yBottom, barLine);
+#endif
+                DrawBarLine(dc, yTop, yBottom, barLine, form);
                 if (barLine->HasRepetitionDots()) {
-                    DrawBarLineDots(dc, childStaffDef, staff, barLine);
+                    DrawBarLineDots(dc, staff, barLine);
                 }
             }
         }
     }
     else {
-        const ListOfObjects *staffDefs = staffGrp->GetList(staffGrp);
+        if (barLine->GetForm() == BARRENDITION_NONE) return;
+        const ArrayOfObjects *staffDefs = staffGrp->GetList(staffGrp);
         if (staffDefs->empty()) {
             return;
         }
 
         StaffDef *firstDef = NULL;
-        ListOfObjects::const_iterator iter;
-        for (iter = staffDefs->begin(); iter != staffDefs->end(); iter++) {
-            StaffDef *staffDef = dynamic_cast<StaffDef *>(*iter);
+        ArrayOfObjects::const_iterator iter;
+        for (iter = staffDefs->begin(); iter != staffDefs->end(); ++iter) {
+            StaffDef *staffDef = vrv_cast<StaffDef *>(*iter);
             assert(staffDef);
             if (staffDef->GetDrawingVisibility() != OPTIMIZATION_HIDDEN) {
                 firstDef = staffDef;
@@ -648,9 +779,9 @@ void View::DrawBarLines(DeviceContext *dc, Measure *measure, StaffGrp *staffGrp,
         }
 
         StaffDef *lastDef = NULL;
-        ListOfObjects::const_reverse_iterator riter;
-        for (riter = staffDefs->rbegin(); riter != staffDefs->rend(); riter++) {
-            StaffDef *staffDef = dynamic_cast<StaffDef *>(*riter);
+        ArrayOfObjects::const_reverse_iterator riter;
+        for (riter = staffDefs->rbegin(); riter != staffDefs->rend(); ++riter) {
+            StaffDef *staffDef = vrv_cast<StaffDef *>(*riter);
             assert(staffDef);
             if (staffDef->GetDrawingVisibility() != OPTIMIZATION_HIDDEN) {
                 lastDef = staffDef;
@@ -665,9 +796,9 @@ void View::DrawBarLines(DeviceContext *dc, Measure *measure, StaffGrp *staffGrp,
 
         // Get the corresponding staff looking at the previous (or first) measure
         AttNIntegerComparison comparisonFirst(STAFF, firstDef->GetN());
-        Staff *first = dynamic_cast<Staff *>(measure->FindChildByComparison(&comparisonFirst, 1));
+        Staff *first = dynamic_cast<Staff *>(measure->FindDescendantByComparison(&comparisonFirst, 1));
         AttNIntegerComparison comparisonLast(STAFF, lastDef->GetN());
-        Staff *last = dynamic_cast<Staff *>(measure->FindChildByComparison(&comparisonLast, 1));
+        Staff *last = dynamic_cast<Staff *>(measure->FindDescendantByComparison(&comparisonLast, 1));
 
         if (!first || !last) {
             LogDebug("Could not get staff (%d; %d) while drawing staffGrp - DrawStaffGrp", firstDef->GetN(),
@@ -683,140 +814,166 @@ void View::DrawBarLines(DeviceContext *dc, Measure *measure, StaffGrp *staffGrp,
         // erase intersections only if we have more than one staff
         bool eraseIntersections = (first != last) ? true : false;
         // do not erase intersections with right barline of the last measure of the system
-        if (isLastMeasure && barLine->Is(BARLINE_ATTR_RIGHT)) {
+        if (isLastMeasure && (barLine->GetPosition() == BarLinePosition::Right)) {
             eraseIntersections = false;
         }
-        DrawBarLine(dc, yTop, yBottom, barLine, eraseIntersections);
+        DrawBarLine(dc, yTop, yBottom, barLine, barLine->GetForm(), eraseIntersections);
 
         // Now we have a barthru barLine, but we have dots so we still need to go through each staff
         if (barLine->HasRepetitionDots()) {
             StaffDef *childStaffDef = NULL;
-            const ListOfObjects *childList = staffGrp->GetList(staffGrp); // make sure it's initialized
-            for (ListOfObjects::const_reverse_iterator it = childList->rbegin(); it != childList->rend(); ++it) {
+            const ArrayOfObjects *childList = staffGrp->GetList(staffGrp); // make sure it's initialized
+            for (ArrayOfObjects::const_reverse_iterator it = childList->rbegin(); it != childList->rend(); ++it) {
                 childStaffDef = dynamic_cast<StaffDef *>((*it));
                 if (childStaffDef) {
                     AttNIntegerComparison comparison(STAFF, childStaffDef->GetN());
-                    Staff *staff = dynamic_cast<Staff *>(measure->FindChildByComparison(&comparison, 1));
+                    Staff *staff = dynamic_cast<Staff *>(measure->FindDescendantByComparison(&comparison, 1));
                     if (!staff) {
                         LogDebug(
                             "Could not get staff (%d) while drawing staffGrp - DrawBarLines", childStaffDef->GetN());
                         continue;
                     }
-                    DrawBarLineDots(dc, childStaffDef, staff, barLine);
+                    DrawBarLineDots(dc, staff, barLine);
                 }
             }
         }
     }
 }
 
-void View::DrawBarLine(DeviceContext *dc, int yTop, int yBottom, BarLine *barLine, bool eraseIntersections)
+void View::DrawBarLine(
+    DeviceContext *dc, int yTop, int yBottom, BarLine *barLine, const data_BARRENDITION form, bool eraseIntersections)
 {
     assert(dc);
     assert(barLine);
 
-    int x = barLine->GetDrawingX();
-    int barLineWidth = m_doc->GetDrawingBarLineWidth(100);
-    int barLineThickWidth = m_doc->GetDrawingBeamWidth(100, false);
-    int x1 = x - m_doc->GetDrawingBeamWidth(100, false) - barLineWidth;
-    int x2 = x + m_doc->GetDrawingBeamWidth(100, false) + barLineWidth;
+    Staff *staff = dynamic_cast<Staff *>(barLine->GetFirstAncestor(STAFF));
+    const int staffSize = (staff) ? staff->m_drawingStaffSize : 100;
+
+    const int x = barLine->GetDrawingX();
+    const int barLineWidth = m_doc->GetDrawingBarLineWidth(staffSize);
+    const int barLineThickWidth = m_doc->GetDrawingUnit(staffSize) * m_options->m_thickBarlineThickness.GetValue();
+    const int barLineSeparation = m_doc->GetDrawingUnit(staffSize) * m_options->m_barLineSeparation.GetValue();
+    const int barLinesSum = barLineThickWidth + barLineWidth;
+    int x2 = x + barLineSeparation;
+
     // optimized for five line staves
-    int dashLength = m_doc->GetDrawingUnit(100) * 8 / 13;
+    int dashLength = m_doc->GetDrawingUnit(staffSize) * 16 / 13;
+    int dotLength = m_doc->GetDrawingUnit(staffSize) * 4 / 13;
 
     SegmentedLine line(yTop, yBottom);
     // We do not need to do this during layout calculation
     if (eraseIntersections && !dc->Is(BBOX_DEVICE_CONTEXT)) {
-        System *system = dynamic_cast<System *>(barLine->GetFirstParent(SYSTEM));
+        System *system = dynamic_cast<System *>(barLine->GetFirstAncestor(SYSTEM));
         if (system) {
-            int minX = x1 - barLineWidth / 2;
-            int maxX = x1 + barLineWidth / 2;
-            if ((barLine->GetForm() == BARRENDITION_rptend) || (barLine->GetForm() == BARRENDITION_end)) {
-                maxX = x + barLineThickWidth / 2;
+            int minX = x - barLineWidth / 2;
+            int maxX = x + barLineWidth / 2;
+            if ((form == BARRENDITION_rptend) || (form == BARRENDITION_end)) {
+                maxX = x2 + barLinesSum / 2;
             }
-            else if (barLine->GetForm() == BARRENDITION_rptboth) {
-                maxX = x2 + barLineWidth / 2;
+            else if (form == BARRENDITION_rptboth) {
+                maxX = x + barLinesSum + barLineSeparation * 2;
             }
-            else if (barLine->GetForm() == BARRENDITION_rptstart) {
+            else if (form == BARRENDITION_rptstart) {
                 minX = x - barLineThickWidth / 2;
-                maxX = x2 + barLineWidth / 2;
+                maxX = x2 + barLinesSum / 2;
             }
-            else if ((barLine->GetForm() == BARRENDITION_dbl) || (barLine->GetForm() == BARRENDITION_dbldashed)) {
-                minX = x - barLineWidth / 2;
+            else if ((form == BARRENDITION_dbl) || (form == BARRENDITION_dbldashed)
+                || (form == BARRENDITION_dbldotted)) {
                 maxX = x2 + barLineWidth / 2;
             }
             Object lines;
             lines.SetParent(system);
             lines.UpdateContentBBoxX(minX, maxX);
             lines.UpdateContentBBoxY(yTop, yBottom);
-            int margin = m_doc->GetDrawingUnit(100) / 2;
+            int margin = m_doc->GetDrawingUnit(staffSize) / 2;
             system->m_systemAligner.FindAllIntersectionPoints(line, lines, { DIR, DYNAM, TEMPO }, margin);
         }
     }
 
-    if (barLine->GetForm() == BARRENDITION_single) {
-        DrawVerticalSegmentedLine(dc, x, line, barLineWidth);
-    }
-    else if (barLine->GetForm() == BARRENDITION_dashed) {
-        DrawVerticalSegmentedLine(dc, x, line, barLineWidth, dashLength);
-    }
-    else if (barLine->GetForm() == BARRENDITION_rptend) {
-        DrawVerticalSegmentedLine(dc, x1, line, barLineWidth);
-        DrawVerticalSegmentedLine(dc, x, line, barLineThickWidth);
-    }
-    else if (barLine->GetForm() == BARRENDITION_rptboth) {
-        DrawVerticalSegmentedLine(dc, x1, line, barLineWidth);
-        DrawVerticalSegmentedLine(dc, x, line, barLineThickWidth);
-        DrawVerticalSegmentedLine(dc, x2, line, barLineWidth);
-    }
-    else if (barLine->GetForm() == BARRENDITION_rptstart) {
-        DrawVerticalSegmentedLine(dc, x, line, barLineThickWidth);
-        DrawVerticalSegmentedLine(dc, x2, line, barLineWidth);
-    }
-    else if (barLine->GetForm() == BARRENDITION_invis) {
-        barLine->SetEmptyBB();
-    }
-    else if (barLine->GetForm() == BARRENDITION_end) {
-        DrawVerticalSegmentedLine(dc, x1, line, barLineWidth);
-        DrawVerticalSegmentedLine(dc, x, line, barLineThickWidth);
-    }
-    else if (barLine->GetForm() == BARRENDITION_dbl) {
-        // Narrow the bars a little bit - should be centered?
-        x2 -= barLineWidth;
-        DrawVerticalSegmentedLine(dc, x, line, barLineWidth);
-        DrawVerticalSegmentedLine(dc, x2, line, barLineWidth);
-    }
-    else if (barLine->GetForm() == BARRENDITION_dbldashed) {
-        x2 -= barLineWidth;
-        DrawVerticalSegmentedLine(dc, x, line, barLineWidth, dashLength);
-        DrawVerticalSegmentedLine(dc, x2, line, barLineWidth, dashLength);
-    }
-    else {
-        // Use solid barline as fallback
-        LogWarning("%s bar lines not supported", barLine->AttBarLineLog::BarrenditionToStr(barLine->GetForm()).c_str());
-        DrawVerticalSegmentedLine(dc, x, line, barLineWidth);
+    switch (form) {
+        case BARRENDITION_single: //
+            DrawVerticalSegmentedLine(dc, x, line, barLineWidth);
+            break;
+        case BARRENDITION_dashed: //
+            DrawVerticalSegmentedLine(dc, x, line, barLineWidth, dashLength);
+            break;
+        case BARRENDITION_dotted: //
+            DrawVerticalSegmentedLine(dc, x, line, barLineWidth, dotLength);
+            break;
+        case BARRENDITION_rptend:
+            DrawVerticalSegmentedLine(dc, x, line, barLineWidth);
+            DrawVerticalSegmentedLine(dc, x2 + barLinesSum / 2, line, barLineThickWidth);
+            break;
+        case BARRENDITION_rptboth:
+            x2 = x + barLinesSum + barLineSeparation * 2;
+            DrawVerticalSegmentedLine(dc, x, line, barLineWidth);
+            DrawVerticalSegmentedLine(dc, (x + x2) / 2, line, barLineThickWidth);
+            DrawVerticalSegmentedLine(dc, x2, line, barLineWidth);
+            break;
+        case BARRENDITION_rptstart:
+            DrawVerticalSegmentedLine(dc, x, line, barLineThickWidth);
+            DrawVerticalSegmentedLine(dc, x2 + barLinesSum / 2, line, barLineWidth);
+            break;
+        case BARRENDITION_invis: //
+            barLine->SetEmptyBB();
+            break;
+        case BARRENDITION_end:
+            DrawVerticalSegmentedLine(dc, x, line, barLineWidth);
+            DrawVerticalSegmentedLine(dc, x2 + barLinesSum / 2, line, barLineThickWidth);
+            break;
+        case BARRENDITION_dbl:
+            DrawVerticalSegmentedLine(dc, x, line, barLineWidth);
+            DrawVerticalSegmentedLine(dc, x2 + barLineWidth, line, barLineWidth);
+            break;
+        case BARRENDITION_dbldashed:
+            DrawVerticalSegmentedLine(dc, x, line, barLineWidth, dashLength);
+            DrawVerticalSegmentedLine(dc, x2 + barLineWidth, line, barLineWidth, dashLength);
+            break;
+        case BARRENDITION_dbldotted:
+            DrawVerticalSegmentedLine(dc, x, line, barLineWidth, dotLength);
+            DrawVerticalSegmentedLine(dc, x2 + barLineWidth, line, barLineWidth, dotLength);
+            break;
+        default:
+            // Use solid barline as fallback
+            LogWarning(
+                "%s bar lines not supported", barLine->AttBarLineLog::BarrenditionToStr(barLine->GetForm()).c_str());
+            DrawVerticalSegmentedLine(dc, x, line, barLineWidth);
+            break;
     }
 }
 
-void View::DrawBarLineDots(DeviceContext *dc, StaffDef *staffDef, Staff *staff, BarLine *barLine)
+void View::DrawBarLineDots(DeviceContext *dc, Staff *staff, BarLine *barLine)
 {
     assert(dc);
-    assert(staffDef);
     assert(staff);
     assert(barLine);
 
-    int x = barLine->GetDrawingX();
-    int x1 = x - 2 * m_doc->GetDrawingBeamWidth(100, false) - m_doc->GetDrawingBarLineWidth(staff->m_drawingStaffSize);
-    int x2 = x + 2 * m_doc->GetDrawingBeamWidth(100, false) + m_doc->GetDrawingBarLineWidth(staff->m_drawingStaffSize);
+    const int x = barLine->GetDrawingX();
+    const int dotSeparation = m_doc->GetDrawingUnit(100) * m_options->m_repeatBarLineDotSeparation.GetValue();
+    const int barLineWidth = m_doc->GetDrawingUnit(100) * m_options->m_barLineWidth.GetValue();
+    const int thickBarLineWidth = m_doc->GetDrawingUnit(100) * m_options->m_thickBarlineThickness.GetValue();
+    const int barLineSeparation = m_doc->GetDrawingUnit(100) * m_options->m_barLineSeparation.GetValue();
+    const int xShift = thickBarLineWidth + dotSeparation + barLineSeparation + barLineWidth;
+    const int staffSize = staff->m_drawingStaffSize;
+    const int dotWidth = m_doc->GetGlyphWidth(SMUFL_E044_repeatDot, staffSize, false);
 
-    int yBottom = staff->GetDrawingY() - staffDef->GetLines() * m_doc->GetDrawingUnit(staff->m_drawingStaffSize);
-    int yTop = yBottom + m_doc->GetDrawingDoubleUnit(staff->m_drawingStaffSize);
+    const int x1 = x - barLineWidth / 2 - (dotSeparation + dotWidth);
+    const int x2 = x + xShift;
 
-    if ((barLine->GetForm() == BARRENDITION_rptstart) || (barLine->GetForm() == BARRENDITION_rptboth)) {
-        DrawDot(dc, x2, yBottom, staff->m_drawingStaffSize);
-        DrawDot(dc, x2, yTop, staff->m_drawingStaffSize);
+    const int yBottom = staff->GetDrawingY() - staff->m_drawingLines * m_doc->GetDrawingUnit(staffSize);
+    const int yTop = yBottom + m_doc->GetDrawingDoubleUnit(staffSize);
+
+    if (barLine->GetForm() == BARRENDITION_rptstart) {
+        DrawSmuflCode(dc, x2 - thickBarLineWidth / 2, yTop, SMUFL_E044_repeatDot, staffSize, false);
+        DrawSmuflCode(dc, x2 - thickBarLineWidth / 2, yBottom, SMUFL_E044_repeatDot, staffSize, false);
+    }
+    if (barLine->GetForm() == BARRENDITION_rptboth) {
+        DrawSmuflCode(dc, x2 + barLineSeparation + barLineWidth / 2, yTop, SMUFL_E044_repeatDot, staffSize, false);
+        DrawSmuflCode(dc, x2 + barLineSeparation + barLineWidth / 2, yBottom, SMUFL_E044_repeatDot, staffSize, false);
     }
     if ((barLine->GetForm() == BARRENDITION_rptend) || (barLine->GetForm() == BARRENDITION_rptboth)) {
-        DrawDot(dc, x1, yBottom, staff->m_drawingStaffSize);
-        DrawDot(dc, x1, yTop, staff->m_drawingStaffSize);
+        DrawSmuflCode(dc, x1, yTop, SMUFL_E044_repeatDot, staffSize, false);
+        DrawSmuflCode(dc, x1, yBottom, SMUFL_E044_repeatDot, staffSize, false);
     }
 
     return;
@@ -838,15 +995,33 @@ void View::DrawMeasure(DeviceContext *dc, Measure *measure, System *system)
     }
 
     if (m_drawingScoreDef.GetMnumVisible() != BOOLEAN_false) {
-        MNum *mnum = dynamic_cast<MNum *>(measure->FindChildByType(MNUM));
-        if (mnum) {
+        MNum *mnum = dynamic_cast<MNum *>(measure->FindDescendantByType(MNUM));
+        Reh *reh = dynamic_cast<Reh *>(measure->FindDescendantByType(REH));
+        const bool hasRehearsal = reh
+            && ((reh->HasTstamp() && (reh->GetTstamp() == 0.0))
+                || (reh->GetStart()->Is(BARLINE)
+                    && vrv_cast<BarLine *>(reh->GetStart())->GetPosition() == BarLinePosition::Left));
+        if (mnum && !hasRehearsal) {
             // this should be an option
-            Measure *systemStart = dynamic_cast<Measure *>(system->FindChildByType(MEASURE));
-            if (measure == systemStart || !mnum->IsGenerated()) {
-                // Draw measure numbers > 1
-                if ((measure->GetN() != "0") && (measure->GetN()) != "1") {
-                    DrawMNum(dc, mnum, measure);
+            Measure *systemStart = dynamic_cast<Measure *>(system->FindDescendantByType(MEASURE));
+
+            // Draw non-generated measure numbers
+            // If mnumInterval is 0, draw system starting measure numbers > 1,
+            // otherwise, draw every (mnumInterval)th measure number.
+            int mnumInterval = m_options->m_mnumInterval.GetValue();
+            if ((mnumInterval == 0 && measure == systemStart && measure->GetN() != "0" && measure->GetN() != "1")
+                || !mnum->IsGenerated()
+                || (mnumInterval >= 1 && (std::atoi(measure->GetN().c_str()) % mnumInterval == 0))) {
+                int symbolOffset = m_doc->GetDrawingUnit(100);
+                ScoreDef *scoreDef = system->GetDrawingScoreDef();
+                GrpSym *groupSymbol = vrv_cast<GrpSym *>(scoreDef->FindDescendantByType(GRPSYM));
+                if (groupSymbol && (groupSymbol->GetSymbol() == staffGroupingSym_SYMBOL_bracket)) {
+                    symbolOffset
+                        += m_doc->GetGlyphHeight(SMUFL_E003_bracketTop, 100, false) + m_doc->GetDrawingUnit(100) / 6;
                 }
+                // hardcoded offset for the mNum based on the lyric font size
+                const int yOffset = m_doc->GetDrawingLyricFont(60)->GetPointSize();
+                DrawMNum(dc, mnum, measure, std::max(symbolOffset, yOffset));
             }
         }
     }
@@ -855,14 +1030,14 @@ void View::DrawMeasure(DeviceContext *dc, Measure *measure, System *system)
 
     // Draw the barlines only with measured music
     if (measure->IsMeasuredMusic()) {
-        System *system = dynamic_cast<System *>(measure->GetFirstParent(SYSTEM));
+        System *system = vrv_cast<System *>(measure->GetFirstAncestor(SYSTEM));
         assert(system);
-        if (measure->GetDrawingLeftBarLine() != BARRENDITION_NONE) {
+        if ((measure->GetDrawingLeftBarLine() != BARRENDITION_NONE) || measure->HasInvisibleStaffBarlines()) {
             DrawScoreDef(dc, system->GetDrawingScoreDef(), measure, measure->GetLeftBarLine()->GetDrawingX(),
                 measure->GetLeftBarLine());
         }
-        if (measure->GetDrawingRightBarLine() != BARRENDITION_NONE) {
-            bool isLast = (measure == system->FindChildByType(MEASURE, 1, BACKWARD)) ? true : false;
+        if ((measure->GetDrawingRightBarLine() != BARRENDITION_NONE) || measure->HasInvisibleStaffBarlines()) {
+            bool isLast = (measure == system->FindDescendantByType(MEASURE, 1, BACKWARD)) ? true : false;
             DrawScoreDef(dc, system->GetDrawingScoreDef(), measure, measure->GetRightBarLine()->GetDrawingX(),
                 measure->GetRightBarLine(), isLast);
         }
@@ -877,24 +1052,50 @@ void View::DrawMeasure(DeviceContext *dc, Measure *measure, System *system)
     }
 }
 
-void View::DrawMNum(DeviceContext *dc, MNum *mnum, Measure *measure)
+void View::DrawMeterSigGrp(DeviceContext *dc, Layer *layer, Staff *staff)
+{
+    assert(dc);
+    assert(layer);
+    assert(staff);
+
+    MeterSigGrp *meterSigGrp = layer->GetStaffDefMeterSigGrp();
+    const ArrayOfObjects *childList = meterSigGrp->GetList(meterSigGrp);
+    const int unit = m_doc->GetDrawingUnit(staff->m_drawingStaffSize);
+    int offset = 0;
+    dc->StartGraphic(meterSigGrp, "", meterSigGrp->GetUuid());
+    // Draw meterSigGrp by alternating meterSig and plus sign (when required)
+    for (auto iter = childList->begin(); iter != childList->end(); ++iter) {
+        MeterSig *meterSig = vrv_cast<MeterSig *>(*iter);
+        assert(meterSig);
+
+        if (meterSig->HasCount()) {
+            DrawMeterSig(dc, meterSig, staff, offset);
+        }
+
+        const int y = staff->GetDrawingY() - unit * (staff->m_drawingLines - 1);
+        const int x = meterSig->GetDrawingX() + offset;
+        const int width = meterSig->GetContentRight() - meterSig->GetContentLeft();
+        if ((meterSigGrp->GetFunc() == meterSigGrpLog_FUNC_mixed) && (iter != std::prev(childList->end()))) {
+            // draw plus sign here
+            const int plusX = x + width + unit / 2;
+            DrawSmuflCode(dc, plusX, y, SMUFL_E08C_timeSigPlus, staff->m_drawingStaffSize, false);
+            offset += width + unit + m_doc->GetGlyphWidth(SMUFL_E08C_timeSigPlus, staff->m_drawingStaffSize, false);
+        }
+        else {
+            offset += width + unit;
+        }
+    }
+
+    dc->EndGraphic(meterSigGrp, this);
+}
+
+void View::DrawMNum(DeviceContext *dc, MNum *mnum, Measure *measure, int yOffset)
 {
     assert(dc);
     assert(measure);
     assert(mnum);
 
-    Staff *staff = NULL;
-    ArrayOfObjects staves;
-    AttComparison matchType(STAFF);
-    measure->FindAllChildByComparison(&staves, &matchType, 1);
-    for (auto &child : staves) {
-        staff = dynamic_cast<Staff *>(child);
-        assert(staff);
-        if (staff->DrawingIsVisible()) {
-            break;
-        }
-        staff = NULL;
-    }
+    Staff *staff = measure->GetTopVisibleStaff();
     if (staff) {
 
         dc->StartGraphic(mnum, "", mnum->GetUuid());
@@ -914,10 +1115,23 @@ void View::DrawMNum(DeviceContext *dc, MNum *mnum, Measure *measure)
         // HARDCODED
         // we set mNum to a fixed height above the system and make it a bit smaller than other text
         params.m_x = staff->GetDrawingX();
-        params.m_y = staff->GetDrawingY() + 1.5 * m_doc->GetDrawingDoubleUnit(staff->m_drawingStaffSize);
-        params.m_pointSize = m_doc->GetDrawingLyricFont(staff->m_drawingStaffSize)->GetPointSize() * 4 / 5;
-
-        mnumTxt.SetPointSize(params.m_pointSize);
+        params.m_y = staff->GetDrawingY() + yOffset;
+        if (mnum->HasFontsize()) {
+            data_FONTSIZE *fs = mnum->GetFontsizeAlternate();
+            if (fs->GetType() == FONTSIZE_fontSizeNumeric) {
+                mnumTxt.SetPointSize(fs->GetFontSizeNumeric());
+            }
+            else if (fs->GetType() == FONTSIZE_term) {
+                const int percent = fs->GetPercentForTerm();
+                mnumTxt.SetPointSize(m_doc->GetDrawingLyricFont(percent)->GetPointSize());
+            }
+            else if (fs->GetType() == FONTSIZE_percent) {
+                mnumTxt.SetPointSize(m_doc->GetDrawingLyricFont(fs->GetPercent())->GetPointSize());
+            }
+        }
+        else {
+            mnumTxt.SetPointSize(m_doc->GetDrawingLyricFont(80)->GetPointSize());
+        }
 
         dc->SetBrush(m_currentColour, AxSOLID);
         dc->SetFont(&mnumTxt);
@@ -951,20 +1165,26 @@ void View::DrawStaff(DeviceContext *dc, Staff *staff, Measure *measure, System *
 
     dc->StartGraphic(staff, "", staff->GetUuid());
 
-    DrawStaffLines(dc, staff, measure, system);
+    if (m_doc->GetType() == Facs) {
+        staff->SetFromFacsimile(m_doc);
+    }
+
+    if (staffDef && (staffDef->GetLinesVisible() != BOOLEAN_false)) {
+        DrawStaffLines(dc, staff, measure, system);
+    }
 
     DrawStaffDef(dc, staff, measure);
 
-    if (staff->GetLedgerLinesAbove()) {
+    if (!staff->GetLedgerLinesAbove().empty()) {
         DrawLedgerLines(dc, staff, staff->GetLedgerLinesAbove(), false, false);
     }
-    if (staff->GetLedgerLinesBelow()) {
+    if (!staff->GetLedgerLinesBelow().empty()) {
         DrawLedgerLines(dc, staff, staff->GetLedgerLinesBelow(), true, false);
     }
-    if (staff->GetLedgerLinesAboveCue()) {
+    if (!staff->GetLedgerLinesAboveCue().empty()) {
         DrawLedgerLines(dc, staff, staff->GetLedgerLinesAboveCue(), false, true);
     }
-    if (staff->GetLedgerLinesBelowCue()) {
+    if (!staff->GetLedgerLinesBelowCue().empty()) {
         DrawLedgerLines(dc, staff, staff->GetLedgerLinesBelowCue(), true, true);
     }
 
@@ -972,9 +1192,8 @@ void View::DrawStaff(DeviceContext *dc, Staff *staff, Measure *measure, System *
 
     DrawStaffDefCautionary(dc, staff, measure);
 
-    std::vector<Object *>::iterator iter;
-    for (iter = staff->m_timeSpanningElements.begin(); iter != staff->m_timeSpanningElements.end(); ++iter) {
-        system->AddToDrawingList(*iter);
+    for (auto &spanningElement : staff->m_timeSpanningElements) {
+        system->AddToDrawingListIfNeccessary(spanningElement);
     }
 
     dc->EndGraphic(staff, this);
@@ -987,21 +1206,57 @@ void View::DrawStaffLines(DeviceContext *dc, Staff *staff, Measure *measure, Sys
     assert(measure);
     assert(system);
 
-    int j, x1, x2, y;
+    int j, x1, x2, y1, y2;
 
-    y = staff->GetDrawingY();
-
-    x1 = measure->GetDrawingX();
-    x2 = x1 + measure->GetWidth();
+    if (staff->HasFacs() && (m_doc->GetType() == Facs)) {
+        double d = staff->GetDrawingRotate();
+        x1 = staff->GetDrawingX();
+        x2 = x1 + staff->GetWidth();
+        y1 = ToLogicalY(staff->GetDrawingY());
+        staff->AdjustDrawingStaffSize();
+        y2 = y1 - staff->GetWidth() * tan(d * M_PI / 180.0);
+    }
+    else {
+        x1 = measure->GetDrawingX();
+        x2 = x1 + measure->GetWidth();
+        y1 = staff->GetDrawingY();
+        y2 = y1;
+    }
 
     int lineWidth = m_doc->GetDrawingStaffLineWidth(staff->m_drawingStaffSize);
     dc->SetPen(m_currentColour, ToDeviceContextX(lineWidth), AxSOLID);
     dc->SetBrush(m_currentColour, AxSOLID);
 
     for (j = 0; j < staff->m_drawingLines; ++j) {
-        dc->DrawLine(ToDeviceContextX(x1), ToDeviceContextY(y), ToDeviceContextX(x2), ToDeviceContextY(y));
-        // For drawing rectangles instead of lines
-        y -= m_doc->GetDrawingDoubleUnit(staff->m_drawingStaffSize);
+        // Skewed lines - with Facs (neumes) only for now
+        if (y1 != y2) {
+            dc->DrawLine(ToDeviceContextX(x1), ToDeviceContextY(y1), ToDeviceContextX(x2), ToDeviceContextY(y2));
+            // For drawing rectangles instead of lines
+            y1 -= m_doc->GetDrawingDoubleUnit(staff->m_drawingStaffSize);
+            y2 -= m_doc->GetDrawingDoubleUnit(staff->m_drawingStaffSize);
+        }
+        else {
+            SegmentedLine line(x1, x2);
+            // We do not need to do this during layout calculation - and only with tablature
+            if (!dc->Is(BBOX_DEVICE_CONTEXT) && staff->IsTablature()) {
+                Object fullLine;
+                fullLine.SetParent(system);
+                fullLine.UpdateContentBBoxY(y1 + (lineWidth / 2), y1 - (lineWidth / 2));
+                fullLine.UpdateContentBBoxX(x1, x2);
+                int margin = m_doc->GetDrawingUnit(100) / 2;
+                ListOfObjects notes;
+                ClassIdComparison matchClassId(NOTE);
+                staff->FindAllDescendantByComparison(&notes, &matchClassId);
+                for (auto &note : notes) {
+                    if (note->VerticalContentOverlap(&fullLine, margin / 2)) {
+                        line.AddGap(note->GetContentLeft() - margin, note->GetContentRight() + margin);
+                    }
+                }
+            }
+            DrawHorizontalSegmentedLine(dc, y1, line, lineWidth);
+            y1 -= m_doc->GetDrawingDoubleUnit(staff->m_drawingStaffSize);
+            y2 = y1;
+        }
     }
 
     dc->ResetPen();
@@ -1010,11 +1265,10 @@ void View::DrawStaffLines(DeviceContext *dc, Staff *staff, Measure *measure, Sys
     return;
 }
 
-void View::DrawLedgerLines(DeviceContext *dc, Staff *staff, ArrayOfLedgerLines *lines, bool below, bool cueSize)
+void View::DrawLedgerLines(DeviceContext *dc, Staff *staff, const ArrayOfLedgerLines &lines, bool below, bool cueSize)
 {
     assert(dc);
     assert(staff);
-    assert(lines);
 
     std::string gClass = "above";
     int y = staff->GetDrawingY();
@@ -1034,21 +1288,17 @@ void View::DrawLedgerLines(DeviceContext *dc, Staff *staff, ArrayOfLedgerLines *
 
     dc->StartCustomGraphic("ledgerLines", gClass);
 
-    // HARDCODED
-    int lineWidth = m_doc->GetDrawingStaffLineWidth(staff->m_drawingStaffSize) * 1.75;
-    if (cueSize) lineWidth = m_doc->GetDrawingStaffLineWidth(staff->m_drawingStaffSize) * 1.25;
+    int lineWidth
+        = m_doc->GetOptions()->m_ledgerLineThickness.GetValue() * m_doc->GetDrawingUnit(staff->m_drawingStaffSize);
+    if (cueSize) lineWidth *= m_doc->GetOptions()->m_graceFactor.GetValue();
 
     dc->SetPen(m_currentColour, ToDeviceContextX(lineWidth), AxSOLID);
     dc->SetBrush(m_currentColour, AxSOLID);
 
-    ArrayOfLedgerLines::iterator iter;
-    std::list<std::pair<int, int> >::iterator iterDashes;
-
-    // First add the dash
-    for (iter = lines->begin(); iter != lines->end(); ++iter) {
-        for (iterDashes = (*iter).m_dashes.begin(); iterDashes != (*iter).m_dashes.end(); ++iterDashes) {
-            dc->DrawLine(ToDeviceContextX(x + iterDashes->first), ToDeviceContextY(y),
-                ToDeviceContextX(x + iterDashes->second), ToDeviceContextY(y));
+    for (const LedgerLine &line : lines) {
+        for (const std::pair<int, int> &dash : line.m_dashes) {
+            dc->DrawLine(ToDeviceContextX(x + dash.first), ToDeviceContextY(y), ToDeviceContextX(x + dash.second),
+                ToDeviceContextY(y));
         }
         y += ySpace;
     }
@@ -1057,8 +1307,6 @@ void View::DrawLedgerLines(DeviceContext *dc, Staff *staff, ArrayOfLedgerLines *
     dc->ResetBrush();
 
     dc->EndCustomGraphic();
-
-    return;
 }
 
 void View::DrawStaffDef(DeviceContext *dc, Staff *staff, Measure *measure)
@@ -1068,7 +1316,7 @@ void View::DrawStaffDef(DeviceContext *dc, Staff *staff, Measure *measure)
     assert(measure);
 
     // StaffDef information is always in the first layer
-    Layer *layer = dynamic_cast<Layer *>(staff->FindChildByType(LAYER));
+    Layer *layer = dynamic_cast<Layer *>(staff->FindDescendantByType(LAYER));
     if (!layer || !layer->HasStaffDef()) return;
 
     // StaffDef staffDef;
@@ -1084,7 +1332,10 @@ void View::DrawStaffDef(DeviceContext *dc, Staff *staff, Measure *measure)
     if (layer->GetStaffDefMensur()) {
         DrawLayerElement(dc, layer->GetStaffDefMensur(), layer, staff, measure);
     }
-    if (layer->GetStaffDefMeterSig()) {
+    if (layer->GetStaffDefMeterSigGrp()) {
+        DrawMeterSigGrp(dc, layer, staff);
+    }
+    else if (layer->GetStaffDefMeterSig()) {
         DrawLayerElement(dc, layer->GetStaffDefMeterSig(), layer, staff, measure);
     }
 
@@ -1098,7 +1349,7 @@ void View::DrawStaffDefCautionary(DeviceContext *dc, Staff *staff, Measure *meas
     assert(measure);
 
     // StaffDef cautionary information is always in the first layer
-    Layer *layer = dynamic_cast<Layer *>(staff->FindChildByType(LAYER));
+    Layer *layer = dynamic_cast<Layer *>(staff->FindDescendantByType(LAYER));
     if (!layer || !layer->HasCautionStaffDef()) return;
 
     // StaffDef staffDef;
@@ -1133,7 +1384,7 @@ int View::CalculatePitchCode(Layer *layer, int y_n, int x_pos, int *octave)
     assert(layer);
     assert(octave);
 
-    Staff *parentStaff = dynamic_cast<Staff *>(layer->GetFirstParent(STAFF));
+    Staff *parentStaff = vrv_cast<Staff *>(layer->GetFirstAncestor(STAFF));
     assert(parentStaff); // Pointer to parent has to be a staff
 
     static int touches[]
@@ -1192,7 +1443,8 @@ void View::DrawLayer(DeviceContext *dc, Layer *layer, Staff *staff, Measure *mea
     dc->EndGraphic(layer, this);
 
     // first draw the postponed tuplets
-    DrawLayerList(dc, layer, staff, measure, TUPLET);
+    DrawLayerList(dc, layer, staff, measure, TUPLET_BRACKET);
+    DrawLayerList(dc, layer, staff, measure, TUPLET_NUM);
 }
 
 void View::DrawLayerList(DeviceContext *dc, Layer *layer, Staff *staff, Measure *measure, const ClassId classId)
@@ -1202,21 +1454,81 @@ void View::DrawLayerList(DeviceContext *dc, Layer *layer, Staff *staff, Measure 
     assert(staff);
     assert(measure);
 
-    ListOfObjects *drawingList = layer->GetDrawingList();
-    ListOfObjects::iterator iter;
+    ArrayOfObjects *drawingList = layer->GetDrawingList();
+    ArrayOfObjects::iterator iter;
 
     for (iter = drawingList->begin(); iter != drawingList->end(); ++iter) {
-        if ((*iter)->Is(classId) && (classId == TUPLET)) {
-            Tuplet *tuplet = dynamic_cast<Tuplet *>((*iter));
-            assert(tuplet);
-            dc->ResumeGraphic(tuplet, tuplet->GetUuid());
-            DrawTupletPostponed(dc, tuplet, layer, staff);
-            dc->EndResumedGraphic(tuplet, this);
+        if ((*iter)->Is(classId) && (classId == TUPLET_BRACKET)) {
+            DrawTupletBracket(dc, dynamic_cast<LayerElement *>(*iter), layer, staff, measure);
         }
-        else {
-            // This should never happen
-            LogError("Element '%s' in the layer list cannot be drawn", (*iter)->GetClassName().c_str());
+        if ((*iter)->Is(classId) && (classId == TUPLET_NUM)) {
+            DrawTupletNum(dc, dynamic_cast<LayerElement *>(*iter), layer, staff, measure);
         }
+    }
+}
+
+void View::DrawSystemDivider(DeviceContext *dc, System *system, Measure *firstMeasure)
+{
+    assert(dc);
+    assert(system);
+
+    // Draw system divider (from the second one) if scoreDef is optimized
+    if (!firstMeasure || (m_options->m_systemDivider.GetValue() == SYSTEMDIVIDER_none)) return;
+    // No system divider if we are on the first system of a page or of an mdiv
+    if (system->IsFirstInPage() || system->IsFirstOfMdiv()) return;
+
+    // initialize to zero, first measure is not supposed to have system divider
+    int previousSystemBottomMarginY = 0;
+    Object *currentPage = system->GetFirstAncestor(PAGE);
+    if (currentPage) {
+        Object *previousSystem = currentPage->GetPrevious(system);
+        if (previousSystem) {
+            Measure *previousSystemMeasure = dynamic_cast<Measure *>(previousSystem->FindDescendantByType(MEASURE, 1));
+            if (previousSystemMeasure) {
+                Staff *bottomStaff = previousSystemMeasure->GetBottomVisibleStaff();
+                // set Y position to that of lowest (bottom) staff, substact space taken by staff lines and
+                // substract offset of the system divider symbol itself (added to y2 and y4)
+                if (bottomStaff) {
+                    previousSystemBottomMarginY = bottomStaff->GetDrawingY()
+                        - (bottomStaff->m_drawingLines - 1)
+                            * m_doc->GetDrawingDoubleUnit(bottomStaff->m_drawingStaffSize)
+                        - m_doc->GetDrawingUnit(100) * 5;
+                }
+            }
+        }
+    }
+
+    if ((system->IsDrawingOptimized() || (m_options->m_systemDivider.GetValue() > SYSTEMDIVIDER_auto))) {
+        int y = system->GetDrawingY();
+        Staff *staff = firstMeasure->GetTopVisibleStaff();
+        if (staff) {
+            // Place it in the middle of current and previous systems - in very tight layout this can collision with
+            // the staff above. To be improved
+            y = (staff->GetDrawingY() + previousSystemBottomMarginY) / 2;
+        }
+        int x1 = system->GetDrawingX() - m_doc->GetDrawingUnit(100) * 3;
+        int x2 = system->GetDrawingX() + m_doc->GetDrawingUnit(100) * 3;
+        int y1 = y - m_doc->GetDrawingUnit(100) * 1;
+        int y2 = y + m_doc->GetDrawingUnit(100) * 3;
+        int y3 = y1 + m_doc->GetDrawingUnit(100) * 2;
+        int y4 = y2 + m_doc->GetDrawingUnit(100) * 2;
+        // left and left-right
+        dc->StartCustomGraphic("systemDivider");
+
+        DrawObliquePolygon(dc, x1, y1, x2, y2, m_doc->GetDrawingUnit(100) * 1.5);
+        DrawObliquePolygon(dc, x1, y3, x2, y4, m_doc->GetDrawingUnit(100) * 1.5);
+        if (m_options->m_systemDivider.GetValue() == SYSTEMDIVIDER_left_right) {
+            // Right divider is not taken into account in the layout calculation and can collision with the music
+            // content
+            Measure *lastMeasure = vrv_cast<Measure *>(system->FindDescendantByType(MEASURE, 1, BACKWARD));
+            assert(lastMeasure);
+            int x4 = lastMeasure->GetDrawingX() + lastMeasure->GetRightBarLineRight();
+            int x3 = x4 - m_doc->GetDrawingUnit(100) * 6;
+            DrawObliquePolygon(dc, x3, y1, x4, y2, m_doc->GetDrawingUnit(100) * 1.5);
+            DrawObliquePolygon(dc, x3, y3, x4, y4, m_doc->GetDrawingUnit(100) * 1.5);
+        }
+
+        dc->EndCustomGraphic();
     }
 }
 
@@ -1238,12 +1550,18 @@ void View::DrawSystemChildren(DeviceContext *dc, Object *parent, System *system)
         // scoreDef are not drawn directly, but anything else should not be possible
         else if (current->Is(SCOREDEF)) {
             // nothing to do, then
-            ScoreDef *scoreDef = dynamic_cast<ScoreDef *>(current);
+            ScoreDef *scoreDef = vrv_cast<ScoreDef *>(current);
             assert(scoreDef);
+
+            Measure *nextMeasure = dynamic_cast<Measure *>(system->GetNext(scoreDef, MEASURE));
+            if (nextMeasure && scoreDef->DrawLabels()) {
+                DrawScoreDef(dc, scoreDef, nextMeasure, nextMeasure->GetDrawingX());
+            }
+
             SetScoreDefDrawingWidth(dc, scoreDef);
         }
         else if (current->IsSystemElement()) {
-            // cast to EditorialElement check in DrawSystemEditorial element
+            // cast to SystemElement check in DrawSystemEditorial element
             DrawSystemElement(dc, dynamic_cast<SystemElement *>(current), system);
         }
         else if (current->IsEditorialElement()) {
@@ -1262,7 +1580,7 @@ void View::DrawMeasureChildren(DeviceContext *dc, Object *parent, Measure *measu
     assert(parent);
     assert(measure);
     assert(system);
-    
+
     for (auto current : *parent->GetChildren()) {
         if (current->Is(STAFF)) {
             // cast to Staff check in DrawStaff
@@ -1321,7 +1639,7 @@ void View::DrawLayerChildren(DeviceContext *dc, Object *parent, Layer *layer, St
             // cast to EditorialElement check in DrawLayerEditorialElement
             DrawLayerEditorialElement(dc, dynamic_cast<EditorialElement *>(current), layer, staff, measure);
         }
-        else {
+        else if (!current->Is({ LABEL, LABELABBR })) {
             assert(false);
         }
     }
@@ -1331,6 +1649,17 @@ void View::DrawTextChildren(DeviceContext *dc, Object *parent, TextDrawingParams
 {
     assert(dc);
     assert(parent);
+
+    // For ControlElement, we need to set the positioner empty bounding box if no text
+    if (parent->IsControlElement()) {
+        if (!parent->GetChildCount() || !parent->HasNonEditorialContent()) {
+            ControlElement *controlElement = vrv_cast<ControlElement *>(parent);
+            assert(controlElement);
+            FloatingPositioner *positioner = controlElement->GetCurrentFloatingPositioner();
+            // With MNum drawn from DrawMeasure there will be no positioner
+            if (positioner) positioner->SetEmptyBB();
+        }
+    }
 
     for (auto current : *parent->GetChildren()) {
         if (current->IsTextElement()) {
@@ -1402,15 +1731,16 @@ void View::DrawSystemEditorialElement(DeviceContext *dc, EditorialElement *eleme
         DrawAnnot(dc, element);
         return;
     }
-    if (element->Is(APP))
-        assert((dynamic_cast<App *>(element))->GetLevel() == EDITORIAL_TOPLEVEL);
-    else if (element->Is(CHOICE))
-        assert((dynamic_cast<Choice *>(element))->GetLevel() == EDITORIAL_TOPLEVEL);
+    if (element->Is(APP)) {
+        assert(dynamic_cast<App *>(element) && (dynamic_cast<App *>(element)->GetLevel() == EDITORIAL_TOPLEVEL));
+    }
+    else if (element->Is(CHOICE)) {
+        assert(dynamic_cast<Choice *>(element) && (dynamic_cast<Choice *>(element)->GetLevel() == EDITORIAL_TOPLEVEL));
+    }
+    std::string elementStart;
+    if (element->IsBoundaryElement()) elementStart = "systemeElementStart";
 
-    std::string boundaryStart;
-    if (element->IsBoundaryElement()) boundaryStart = "boundaryStart";
-
-    dc->StartGraphic(element, boundaryStart, element->GetUuid());
+    dc->StartGraphic(element, elementStart, element->GetUuid());
     // EditorialElements at the system level that are visible have no children
     // if (element->m_visibility == Visible) {
     //    DrawSystemChildren(dc, element, system);
@@ -1425,10 +1755,12 @@ void View::DrawMeasureEditorialElement(DeviceContext *dc, EditorialElement *elem
         DrawAnnot(dc, element);
         return;
     }
-    if (element->Is(APP))
-        assert((dynamic_cast<App *>(element))->GetLevel() == EDITORIAL_MEASURE);
-    else if (element->Is(CHOICE))
-        assert((dynamic_cast<Choice *>(element))->GetLevel() == EDITORIAL_MEASURE);
+    if (element->Is(APP)) {
+        assert(dynamic_cast<App *>(element) && (dynamic_cast<App *>(element)->GetLevel() == EDITORIAL_MEASURE));
+    }
+    else if (element->Is(CHOICE)) {
+        assert(dynamic_cast<Choice *>(element) && (dynamic_cast<Choice *>(element)->GetLevel() == EDITORIAL_MEASURE));
+    }
 
     dc->StartGraphic(element, "", element->GetUuid());
     if (element->m_visibility == Visible) {
@@ -1444,10 +1776,12 @@ void View::DrawStaffEditorialElement(DeviceContext *dc, EditorialElement *elemen
         DrawAnnot(dc, element);
         return;
     }
-    if (element->Is(APP))
-        assert((dynamic_cast<App *>(element))->GetLevel() == EDITORIAL_STAFF);
-    else if (element->Is(CHOICE))
-        assert((dynamic_cast<Choice *>(element))->GetLevel() == EDITORIAL_STAFF);
+    if (element->Is(APP)) {
+        assert(dynamic_cast<App *>(element) && (dynamic_cast<App *>(element)->GetLevel() == EDITORIAL_STAFF));
+    }
+    else if (element->Is(CHOICE)) {
+        assert(dynamic_cast<Choice *>(element) && (dynamic_cast<Choice *>(element)->GetLevel() == EDITORIAL_STAFF));
+    }
 
     dc->StartGraphic(element, "", element->GetUuid());
     if (element->m_visibility == Visible) {
@@ -1464,10 +1798,12 @@ void View::DrawLayerEditorialElement(
         DrawAnnot(dc, element);
         return;
     }
-    if (element->Is(APP))
-        assert((dynamic_cast<App *>(element))->GetLevel() == EDITORIAL_LAYER);
-    else if (element->Is(CHOICE))
-        assert((dynamic_cast<Choice *>(element))->GetLevel() == EDITORIAL_LAYER);
+    if (element->Is(APP)) {
+        assert(dynamic_cast<App *>(element) && (dynamic_cast<App *>(element)->GetLevel() == EDITORIAL_LAYER));
+    }
+    else if (element->Is(CHOICE)) {
+        assert(dynamic_cast<Choice *>(element) && (dynamic_cast<Choice *>(element)->GetLevel() == EDITORIAL_LAYER));
+    }
 
     dc->StartGraphic(element, "", element->GetUuid());
     if (element->m_visibility == Visible) {
@@ -1483,10 +1819,12 @@ void View::DrawTextEditorialElement(DeviceContext *dc, EditorialElement *element
         DrawAnnot(dc, element, true);
         return;
     }
-    if (element->Is(APP))
-        assert((dynamic_cast<App *>(element))->GetLevel() == EDITORIAL_TEXT);
-    else if (element->Is(CHOICE))
-        assert((dynamic_cast<Choice *>(element))->GetLevel() == EDITORIAL_TEXT);
+    if (element->Is(APP)) {
+        assert(dynamic_cast<App *>(element) && (dynamic_cast<App *>(element)->GetLevel() == EDITORIAL_TEXT));
+    }
+    else if (element->Is(CHOICE)) {
+        assert(dynamic_cast<Choice *>(element) && (dynamic_cast<Choice *>(element)->GetLevel() == EDITORIAL_TEXT));
+    }
 
     dc->StartTextGraphic(element, "", element->GetUuid());
     if (element->m_visibility == Visible) {
@@ -1502,10 +1840,12 @@ void View::DrawFbEditorialElement(DeviceContext *dc, EditorialElement *element, 
         DrawAnnot(dc, element, true);
         return;
     }
-    if (element->Is(APP))
-        assert((dynamic_cast<App *>(element))->GetLevel() == EDITORIAL_FB);
-    else if (element->Is(CHOICE))
-        assert((dynamic_cast<Choice *>(element))->GetLevel() == EDITORIAL_FB);
+    if (element->Is(APP)) {
+        assert(dynamic_cast<App *>(element) && (dynamic_cast<App *>(element)->GetLevel() == EDITORIAL_FB));
+    }
+    else if (element->Is(CHOICE)) {
+        assert(dynamic_cast<Choice *>(element) && (dynamic_cast<Choice *>(element)->GetLevel() == EDITORIAL_FB));
+    }
 
     dc->StartTextGraphic(element, "", element->GetUuid());
     if (element->m_visibility == Visible) {
@@ -1521,10 +1861,12 @@ void View::DrawRunningEditorialElement(DeviceContext *dc, EditorialElement *elem
         DrawAnnot(dc, element, true);
         return;
     }
-    if (element->Is(APP))
-        assert((dynamic_cast<App *>(element))->GetLevel() == EDITORIAL_RUNNING);
-    else if (element->Is(CHOICE))
-        assert((dynamic_cast<Choice *>(element))->GetLevel() == EDITORIAL_RUNNING);
+    if (element->Is(APP)) {
+        assert(dynamic_cast<App *>(element) && (dynamic_cast<App *>(element)->GetLevel() == EDITORIAL_RUNNING));
+    }
+    else if (element->Is(CHOICE)) {
+        assert(dynamic_cast<Choice *>(element) && (dynamic_cast<Choice *>(element)->GetLevel() == EDITORIAL_RUNNING));
+    }
 
     dc->StartGraphic(element, "", element->GetUuid());
     if (element->m_visibility == Visible) {
@@ -1544,7 +1886,7 @@ void View::DrawAnnot(DeviceContext *dc, EditorialElement *element, bool isTextEl
         dc->StartGraphic(element, "", element->GetUuid());
     }
 
-    Annot *annot = dynamic_cast<Annot *>(element);
+    Annot *annot = vrv_cast<Annot *>(element);
     assert(annot);
     dc->AddDescription(UTF16to8(annot->GetText(annot)));
 

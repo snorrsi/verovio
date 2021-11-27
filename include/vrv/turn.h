@@ -10,6 +10,7 @@
 
 #include "atts_cmn.h"
 #include "atts_cmnornaments.h"
+#include "atts_externalsymbols.h"
 #include "controlelement.h"
 #include "timeinterface.h"
 
@@ -25,8 +26,9 @@ namespace vrv {
 class Turn : public ControlElement,
              public TimePointInterface,
              public AttColor,
+             public AttExtSym,
              public AttOrnamentAccid,
-             public AttPlacement,
+             public AttPlacementRelStaff,
              public AttTurnLog {
 public:
     /**
@@ -36,28 +38,47 @@ public:
     ///@{
     Turn();
     virtual ~Turn();
-    virtual void Reset();
-    virtual std::string GetClassName() const { return "Turn"; }
-    virtual ClassId GetClassId() const { return TURN; }
+    Object *Clone() const override { return new Turn(*this); }
+    void Reset() override;
+    std::string GetClassName() const override { return "Turn"; }
     ///@}
 
     /**
      * @name Getter to interfaces
      */
     ///@{
-    virtual TimePointInterface *GetTimePointInterface() { return dynamic_cast<TimePointInterface *>(this); }
+    TimePointInterface *GetTimePointInterface() override { return dynamic_cast<TimePointInterface *>(this); }
     ///@}
+
+    /**
+     * Get the SMuFL glyph for the turn based on form or glyph.num
+     */
+    wchar_t GetTurnGlyph() const;
 
     //----------//
     // Functors //
     //----------//
+
+    /**
+     * See Object::PrepareDelayedTurns
+     */
+    int PrepareDelayedTurns(FunctorParams *functorParams) override;
+
+    /**
+     * See Object::ResetDrawing
+     */
+    int ResetDrawing(FunctorParams *functorParams) override;
 
 protected:
     //
 private:
     //
 public:
-    //
+    /**
+     * The end point of a delayed turn when @startid is used
+     */
+    LayerElement *m_drawingEndElement;
+
 private:
     //
 };

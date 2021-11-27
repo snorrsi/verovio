@@ -16,8 +16,9 @@
 
 namespace vrv {
 
-class Ending;
 class ControlElement;
+class Ending;
+class LayerElement;
 class ScoreDef;
 class System;
 class TimestampAttr;
@@ -33,11 +34,14 @@ class TimestampAttr;
  * For internally simplication of processing, unmeasured music is contained in one single measure object
  */
 class Measure : public Object,
+                public AttBarring,
                 public AttMeasureLog,
                 public AttMeterConformanceBar,
                 public AttNNumberLike,
                 public AttPointing,
                 public AttTyped {
+private:
+    using BarlineRenditionPair = std::pair<data_BARRENDITION, data_BARRENDITION>;
 
 public:
     /**
@@ -47,10 +51,15 @@ public:
     ///@{
     Measure(bool measuredMusic = true, int logMeasureNb = -1);
     virtual ~Measure();
-    virtual void Reset();
-    virtual std::string GetClassName() const { return "Measure"; }
-    virtual ClassId GetClassId() const { return MEASURE; }
+    Object *Clone() const override { return new Measure(*this); };
+    void Reset() override;
+    std::string GetClassName() const override { return "Measure"; }
     ///@}
+
+    /**
+     * Overriding CloneReset() method to be called after copy / assignment calls.
+     */
+    void CloneReset() override;
 
     /**
      * Return true if measured music (otherwise we have fake measures)
@@ -58,12 +67,14 @@ public:
     bool IsMeasuredMusic() const { return m_measuredMusic; }
 
     /**
-     * @name Methods for adding allowed content
+     * Methods for adding allowed content
      */
-    ///@{
-    virtual void AddChild(Object *object);
+    bool IsSupportedChild(Object *object) override;
+
+    /**
+     * Specific method for measures
+     */
     void AddChildBack(Object *object);
-    ///@}
 
     /**
      * Add a TimestampAttr to the measure.
@@ -74,7 +85,12 @@ public:
     /**
      * Get the X drawing position
      */
-    virtual int GetDrawingX() const;
+    int GetDrawingX() const override;
+
+    /**
+     * Reset the cached values of the drawingX values.
+     */
+    void ResetCachedDrawingX() const override;
 
     /**
      * @name Get and set the X drawing relative positions
@@ -92,8 +108,8 @@ public:
     /**
      * @name Set and get the left and right barline types
      * This somehow conflicts with AttMeasureLog, which is transfered from and to the
-     * Barline object when reading and writing MEI. See MeiInput::ReadMeasure and
-     * MeiOutput::WriteMeasure
+     * Barline object when reading and writing MEI. See MEIInput::ReadMeasure and
+     * MEIOutput::WriteMeasure
      * Alternatively, we could keep them in sync here:
      * data_BARRENDITION GetDrawingLeftBarLine() { m_leftBarLine.SetRend(GetRight()); return m_leftBarLine.GetRend(); }
      * void SetLeftBarLineType(data_BARRENDITION type) { m_leftBarLine.SetRend(type); SetLeft(type); }
@@ -103,13 +119,33 @@ public:
     void SetDrawingLeftBarLine(data_BARRENDITION type) { m_leftBarLine.SetForm(type); }
     data_BARRENDITION GetDrawingRightBarLine() const { return m_rightBarLine.GetForm(); }
     void SetDrawingRightBarLine(data_BARRENDITION type) { m_rightBarLine.SetForm(type); }
+    data_BARRENDITION GetDrawingLeftBarLineByStaffN(int staffN) const;
+    data_BARRENDITION GetDrawingRightBarLineByStaffN(int staffN) const;
     ///@}
+
+    /**
+     * Return whether there is mapping of barline values to invisible staves present in measure
+     */
+    bool HasInvisibleStaffBarlines() const { return !m_invisibleStaffBarlines.empty(); }
+
+    /**
+     * Select drawing barlines based on the previous right and current left barlines (to avoid duplicated doubles or
+     * singles). In certain cases drawn barlines would be simplified if they can be overlapped, e.g. single with dbl
+     */
+    BarlineRenditionPair SelectDrawingBarLines(Measure *previous);
 
     /**
      * Set the drawing barlines for the measure.
      * Also adjust the right barline of the previous measure and the left one if necessary.
      */
-    void SetDrawingBarLines(Measure *previous, bool systemBreak, bool scoreDefInsert);
+    void SetDrawingBarLines(Measure *previous, int barlineDrawingFlags);
+
+    /**
+     * Create mapping of original barline values to staves in the measure that are neighbored by invisible staves. This
+     * will allow to draw proper barline when invisible staff hides overlaping barline
+     */
+    void SetInvisibleStaffBarlines(
+        Measure *previous, ListOfObjects &currentInvisible, ListOfObjects &previousInvisible, int barlineDrawingFlags);
 
     /**
      * @name Set and get the barlines.
@@ -138,6 +174,11 @@ public:
     int GetRightBarLineLeft() const;
     int GetRightBarLineRight() const;
     ///@}
+
+    /**
+     * Return the width of the right barline based on the barline form
+     */
+    int GetRightBarLineWidth(Doc *doc);
 
     /**
      * Return the width of the measure, including the barLine width
@@ -182,6 +223,18 @@ public:
     std::vector<Staff *> GetFirstStaffGrpStaves(ScoreDef *scoreDef);
 
     /**
+     * Return the top (first) visible staff in the measure (if any).
+     * Takes into account system optimization
+     */
+    Staff *GetTopVisibleStaff();
+
+    /**
+     * Return the botoom (last) visible staff in the measure (if any).
+     * Takes into account system optimization
+     */
+    Staff *GetBottomVisibleStaff();
+
+    /**
      * Check if the measure encloses the given time (in millisecond)
      * Return the playing repeat time (1-based), 0 otherwise
      */
@@ -190,7 +243,12 @@ public:
     /**
      * Return the real time offset in millisecond for the repeat (1-based).
      */
-    int GetRealTimeOffsetMilliseconds(int repeat) const;
+    double GetRealTimeOffsetMilliseconds(int repeat) const;
+
+    /**
+     * Return vector with tie endpoints for ties that start and end in current measure
+     */
+    std::vector<std::pair<LayerElement *, LayerElement *>> GetInternalTieEndpoints();
 
     //SS
     /**
@@ -203,194 +261,224 @@ public:
     //----------//
 
     /**
-     * See Object::ConvertAnalyticalMarkup
+     * See Object::FindSpannedLayerElements
      */
-    virtual int ConvertAnalyticalMarkupEnd(FunctorParams *functorParams);
+    ///@{
+    int FindSpannedLayerElements(FunctorParams *functorParams) override;
+    int FindSpannedLayerElementsEnd(FunctorParams *functorParams) override;
+    ///@}
+
+    /**
+     * See Object::ConvertMarkupAnalytical
+     */
+    int ConvertMarkupAnalyticalEnd(FunctorParams *functorParams) override;
 
     /**
      * See Object::ConvertToPageBased
      */
-    virtual int ConvertToPageBased(FunctorParams *functorParams);
+    int ConvertToPageBased(FunctorParams *functorParams) override;
 
     /**
      * See Object::ConvertToCastOffMensural
      */
-    virtual int ConvertToCastOffMensural(FunctorParams *params);
+    int ConvertToCastOffMensural(FunctorParams *functorParams) override;
 
     /**
      * See Object::ConvertToUnCastOffMensural
      */
-    virtual int ConvertToUnCastOffMensural(FunctorParams *params);
+    int ConvertToUnCastOffMensural(FunctorParams *functorParams) override;
 
     /**
      * See Object::Save
      */
     ///@{
-    virtual int Save(FunctorParams *functorParams);
-    virtual int SaveEnd(FunctorParams *functorParams);
+    int Save(FunctorParams *functorParams) override;
+    int SaveEnd(FunctorParams *functorParams) override;
     ///@}
 
     /**
-     * See Object::UnsetCurrentScoreDef
+     * See Object::UnscoreDefSetCurrent
      */
-    virtual int UnsetCurrentScoreDef(FunctorParams *functorParams);
+    int ScoreDefUnsetCurrent(FunctorParams *functorParams) override;
 
     /**
-     * See Object::OptimizeScoreDef
+     * See Object::ScoreDefOptimize
      */
-    virtual int OptimizeScoreDef(FunctorParams *functorParams);
+    int ScoreDefOptimize(FunctorParams *functorParams) override;
 
     /**
      * See Object::ResetHorizontalAlignment
      */
-    virtual int ResetHorizontalAlignment(FunctorParams *functorParams);
+    int ResetHorizontalAlignment(FunctorParams *functorParams) override;
 
     /**
      * See Object::ApplyPPUFactor
      */
-    virtual int ApplyPPUFactor(FunctorParams *functorParams);
+    int ApplyPPUFactor(FunctorParams *functorParams) override;
 
     /**
      * See Object::AlignHorizontally
      */
-    virtual int AlignHorizontally(FunctorParams *functorParams);
-    virtual int AlignHorizontallyEnd(FunctorParams *functorParams);
+    int AlignHorizontally(FunctorParams *functorParams) override;
+    int AlignHorizontallyEnd(FunctorParams *functorParams) override;
 
     /**
      * See Object::AlignVertically
      */
-    virtual int AlignVertically(FunctorParams *functorParams);
+    int AlignVertically(FunctorParams *functorParams) override;
 
     /**
      * See Object::SetAlignmentXPos
      */
-    virtual int SetAlignmentXPos(FunctorParams *functorParams);
+    int SetAlignmentXPos(FunctorParams *functorParams) override;
 
     /**
      * See Object::AdjustArpeg
      */
-    virtual int AdjustArpegEnd(FunctorParams *functorParams);
+    int AdjustArpegEnd(FunctorParams *functorParams) override;
+
+    /**
+     * See Object::AdjustClefChanges
+     */
+    int AdjustClefChanges(FunctorParams *functorParams) override;
+
+    /**
+     * See Object::AdjustDots
+     */
+    int AdjustDots(FunctorParams *functorParams) override;
 
     /**
      * See Object::AdjustLayers
      */
-    virtual int AdjustLayers(FunctorParams *functorParams);
+    int AdjustLayers(FunctorParams *functorParams) override;
 
     /**
      * See Object::AjustAccidX
      */
-    virtual int AdjustAccidX(FunctorParams *functorParams);
+    int AdjustAccidX(FunctorParams *functorParams) override;
 
     /**
      * See Object::AdjustGraceXPos
      */
-    virtual int AdjustGraceXPos(FunctorParams *functorParams);
+    int AdjustGraceXPos(FunctorParams *functorParams) override;
 
     /**
      * See Object::AdjustXOverflow
      */
-    virtual int AdjustXOverflow(FunctorParams *functorParams);
+    int AdjustXOverflow(FunctorParams *functorParams) override;
 
     /**
      * See Object::AdjustXPos
      */
-    virtual int AdjustXPos(FunctorParams *functorParams);
+    int AdjustXPos(FunctorParams *functorParams) override;
+
+    /**
+     * See Object::AdjustHarmGrpsSpacing
+     */
+    int AdjustHarmGrpsSpacingEnd(FunctorParams *functorParams) override;
 
     /**
      * See Object::AdjustSylSpacing
      */
-    virtual int AdjustSylSpacingEnd(FunctorParams *functorParams);
+    int AdjustSylSpacingEnd(FunctorParams *functorParams) override;
 
     /**
      * See Object::AlignMeasures
      */
-    virtual int AlignMeasures(FunctorParams *functorParams);
+    int AlignMeasures(FunctorParams *functorParams) override;
 
     /**
      * See Object::JustifyX
      */
-    virtual int JustifyX(FunctorParams *functorParams);
+    int JustifyX(FunctorParams *functorParams) override;
 
     /**
      * See Object::CastOffSystems
      */
-    virtual int CastOffSystems(FunctorParams *functorParams);
+    int CastOffSystems(FunctorParams *functorParams) override;
 
     /**
      * See Object::CastOffEncoding
      */
-    virtual int CastOffEncoding(FunctorParams *functorParams);
+    int CastOffEncoding(FunctorParams *functorParams) override;
 
     /**
      * See Object::ResetDrawing
      */
-    virtual int ResetDrawing(FunctorParams *functorParams);
+    int ResetDrawing(FunctorParams *functorParams) override;
 
     /**
      * See Object::FillStaffCurrentTimeSpanningEnd
      */
-    virtual int FillStaffCurrentTimeSpanningEnd(FunctorParams *functorParams);
+    int FillStaffCurrentTimeSpanningEnd(FunctorParams *functorParams) override;
 
     /**
      * See Object::PrepareCrossStaff
      */
-    virtual int PrepareCrossStaff(FunctorParams *functorParams);
+    int PrepareCrossStaff(FunctorParams *functorParams) override;
 
     /**
      * @name See Object::PrepareFloatingGrps
      */
     ///@{
-    virtual int PrepareFloatingGrps(FunctorParams *functoParams);
-    virtual int PrepareFloatingGrpsEnd(FunctorParams *functoParams);
+    int PrepareFloatingGrps(FunctorParams *functorParams) override;
+    int PrepareFloatingGrpsEnd(FunctorParams *functorParams) override;
     ///@}
 
     /**
      * See Object::PrepareTimePointingEnd
      */
-    virtual int PrepareTimePointingEnd(FunctorParams *functorParams);
+    int PrepareTimePointingEnd(FunctorParams *functorParams) override;
 
     /**
      * See Object::PrepareTimeSpanningEnd
      */
-    virtual int PrepareTimeSpanningEnd(FunctorParams *functorParams);
+    int PrepareTimeSpanningEnd(FunctorParams *functorParams) override;
 
     /**
      * See Object::PrepareBoundaries
      */
-    virtual int PrepareBoundaries(FunctorParams *functorParams);
+    int PrepareBoundaries(FunctorParams *functorParams) override;
 
     /**
      * @name See Object::GenerateMIDI
      */
     ///@{
-    virtual int GenerateMIDI(FunctorParams *functorParams);
+    int GenerateMIDI(FunctorParams *functorParams) override;
     ///@}
 
     /**
      * @name See Object::GenerateTimemap
      */
     ///@{
-    virtual int GenerateTimemap(FunctorParams *functorParams);
+    int GenerateTimemap(FunctorParams *functorParams) override;
     ///@}
 
     /**
      * See Object::CalcMaxMeasureDuration
      */
-    virtual int CalcMaxMeasureDuration(FunctorParams *functorParams);
+    int CalcMaxMeasureDuration(FunctorParams *functorParams) override;
 
     /**
      * See Object::CalcOnsetOffset
      */
     ///@{
-    virtual int CalcOnsetOffset(FunctorParams *functorParams);
+    int CalcOnsetOffset(FunctorParams *functorParams) override;
     ///@}
 
     /**
      * See Object::PrepareTimestamps
      */
-    virtual int PrepareTimestampsEnd(FunctorParams *functorParams);
+    int PrepareTimestampsEnd(FunctorParams *functorParams) override;
 
 public:
+    // flags for drawing measure barline based on visibility or other conditions
+    enum BarlineDrawingFlags {
+        SYSTEM_BREAK = 0x1,
+        SCORE_DEF_INSERT = 0x2,
+        INVISIBLE_MEASURE_CURRENT = 0x4,
+        INVISIBLE_MEASURE_PREVIOUS = 0x8
+    };
     /**
      * The X absolute position of the measure for facsimile (transcription) encodings.
      * This is the left and right position of the measure.
@@ -403,7 +491,7 @@ public:
     /**
      * The measure aligner that holds the x positions of the content of the measure
      */
-    MeasureAligner m_measureAligner;
+    mutable MeasureAligner m_measureAligner;
 
     TimestampAligner m_timestampAligner;
 
@@ -421,8 +509,8 @@ private:
      * @name The measure barlines (left and right) used when drawing
      */
     ///@{
-    BarLineAttr m_leftBarLine;
-    BarLineAttr m_rightBarLine;
+    BarLine m_leftBarLine;
+    BarLine m_rightBarLine;
     ///@}
 
     /**
@@ -448,8 +536,10 @@ private:
      * Start time state variables.
      */
     std::vector<double> m_scoreTimeOffset;
-    std::vector<int> m_realTimeOffsetMilliseconds;
-    int m_currentTempo;
+    std::vector<double> m_realTimeOffsetMilliseconds;
+    double m_currentTempo;
+
+    std::map<int, BarlineRenditionPair> m_invisibleStaffBarlines;
 };
 
 } // namespace vrv

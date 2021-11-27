@@ -32,7 +32,9 @@ namespace vrv {
 // BeatRpt
 //----------------------------------------------------------------------------
 
-BeatRpt::BeatRpt() : LayerElement("beatrpt-"), AttColor(), AttBeatRptVis()
+static const ClassRegistrar<BeatRpt> s_factory("beatRpt", BEATRPT);
+
+BeatRpt::BeatRpt() : LayerElement(BEATRPT, "beatrpt-"), AttColor(), AttBeatRptVis()
 {
     RegisterAttClass(ATT_BEATRPTVIS);
     RegisterAttClass(ATT_COLOR);
@@ -60,7 +62,7 @@ void BeatRpt::SetScoreTimeOnset(double scoreTime)
     m_scoreTimeOnset = scoreTime;
 }
 
-double BeatRpt::GetScoreTimeOnset()
+double BeatRpt::GetScoreTimeOnset() const
 {
     return m_scoreTimeOnset;
 }
@@ -71,9 +73,10 @@ double BeatRpt::GetScoreTimeOnset()
 
 int BeatRpt::GenerateMIDI(FunctorParams *functorParams)
 {
-    GenerateMIDIParams *params = dynamic_cast<GenerateMIDIParams *>(functorParams);
+    GenerateMIDIParams *params = vrv_params_cast<GenerateMIDIParams *>(functorParams);
     assert(params);
 
+    // Sameas not taken into account for now
     double beatLength = this->GetAlignmentDuration() / (DUR_MAX / DURATION_4);
     double starttime = params->m_totalTime + this->GetScoreTimeOnset();
     int tpq = params->m_midiFile->getTPQ();

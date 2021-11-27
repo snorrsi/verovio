@@ -9,7 +9,9 @@
 
 //----------------------------------------------------------------------------
 
+#include <algorithm>
 #include <assert.h>
+#include <math.h>
 
 //----------------------------------------------------------------------------
 
@@ -19,11 +21,14 @@
 #include "doc.h"
 #include "dynam.h"
 #include "fermata.h"
+#include "fing.h"
 #include "hairpin.h"
 #include "harm.h"
 #include "mordent.h"
 #include "octave.h"
 #include "pedal.h"
+#include "pitchinflection.h"
+#include "reh.h"
 #include "slur.h"
 #include "staff.h"
 #include "tempo.h"
@@ -39,22 +44,28 @@ namespace vrv {
 // Static members
 //----------------------------------------------------------------------------
 
-std::vector<void *> FloatingObject::s_drawingObjectIds;
+thread_local std::vector<void *> FloatingObject::s_drawingObjectIds;
 
 //----------------------------------------------------------------------------
 // FloatingObject
 //----------------------------------------------------------------------------
 
-FloatingObject::FloatingObject() : Object("fe")
+FloatingObject::FloatingObject() : Object(FLOATING_OBJECT, "fe")
 {
     Reset();
 }
 
-FloatingObject::FloatingObject(std::string classid) : Object(classid)
+FloatingObject::FloatingObject(ClassId classId) : Object(classId, "fe")
+{
+    Reset();
+}
+
+FloatingObject::FloatingObject(ClassId classId, const std::string &classIdStr) : Object(classId, classIdStr)
 {
     Reset();
 
     m_currentPositioner = NULL;
+    m_maxDrawingYRel = VRV_UNSET;
 }
 
 FloatingObject::~FloatingObject() {}
@@ -100,6 +111,18 @@ int FloatingObject::GetDrawingY() const
 {
     if (!m_currentPositioner) return 0;
     return m_currentPositioner->GetDrawingY();
+}
+
+void FloatingObject::SetMaxDrawingYRel(int maxDrawingYRel)
+{
+    if (!m_currentPositioner) return;
+    data_STAFFREL drawingPlace = m_currentPositioner->GetDrawingPlace();
+    if (drawingPlace == STAFFREL_above) {
+        if ((m_maxDrawingYRel == VRV_UNSET) || (m_maxDrawingYRel > maxDrawingYRel)) m_maxDrawingYRel = maxDrawingYRel;
+    }
+    else {
+        if ((m_maxDrawingYRel == VRV_UNSET) || (m_maxDrawingYRel < maxDrawingYRel)) m_maxDrawingYRel = maxDrawingYRel;
+    }
 }
 
 void FloatingObject::SetCurrentFloatingPositioner(FloatingPositioner *boundingBox)
@@ -149,107 +172,107 @@ FloatingPositioner::FloatingPositioner(FloatingObject *object, StaffAlignment *a
     m_spanningType = spanningType;
 
     if (object->Is(BRACKETSPAN)) {
-        m_place = STAFFREL_basic_above;
+        m_place = STAFFREL_above;
     }
     else if (object->Is(BREATH)) {
-        Breath *breath = dynamic_cast<Breath *>(object);
+        Breath *breath = vrv_cast<Breath *>(object);
         assert(breath);
         // breath above by default
-        m_place = (breath->GetPlaceAlternate()->GetBasic() != STAFFREL_basic_NONE)
-            ? breath->GetPlaceAlternate()->GetBasic()
-            : STAFFREL_basic_above;
+        m_place = (breath->GetPlace() != STAFFREL_NONE) ? breath->GetPlace() : STAFFREL_above;
     }
     else if (object->Is(DIR)) {
-        Dir *dir = dynamic_cast<Dir *>(object);
+        Dir *dir = vrv_cast<Dir *>(object);
         assert(dir);
         // dir below by default
-        m_place = (dir->GetPlaceAlternate()->GetBasic() != STAFFREL_basic_NONE) ? dir->GetPlaceAlternate()->GetBasic()
-                                                                                : STAFFREL_basic_below;
+        m_place = (dir->GetPlace() != STAFFREL_NONE) ? dir->GetPlace() : STAFFREL_below;
     }
     else if (object->Is(DYNAM)) {
-        Dynam *dynam = dynamic_cast<Dynam *>(object);
+        Dynam *dynam = vrv_cast<Dynam *>(object);
         assert(dynam);
         // dynam below by default
-        m_place = (dynam->GetPlaceAlternate()->GetBasic() != STAFFREL_basic_NONE)
-            ? dynam->GetPlaceAlternate()->GetBasic()
-            : STAFFREL_basic_below;
+        m_place = (dynam->GetPlace() != STAFFREL_NONE) ? dynam->GetPlace() : STAFFREL_below;
     }
     else if (object->Is(ENDING)) {
         // endings always above;
-        m_place = STAFFREL_basic_above;
+        m_place = STAFFREL_above;
     }
     else if (object->Is(FERMATA)) {
-        Fermata *fermata = dynamic_cast<Fermata *>(object);
+        Fermata *fermata = vrv_cast<Fermata *>(object);
         assert(fermata);
         // fermata above by default
-        m_place = (fermata->GetPlaceAlternate()->GetBasic() != STAFFREL_basic_NONE)
-            ? fermata->GetPlaceAlternate()->GetBasic()
-            : STAFFREL_basic_above;
+        m_place = (fermata->GetPlace() != STAFFREL_NONE) ? fermata->GetPlace() : STAFFREL_above;
+    }
+    else if (object->Is(FING)) {
+        Fing *fing = vrv_cast<Fing *>(object);
+        assert(fing);
+        // fing above by default
+        m_place = (fing->GetPlace() != STAFFREL_NONE) ? fing->GetPlace() : STAFFREL_above;
     }
     else if (object->Is(HAIRPIN)) {
-        Hairpin *hairpin = dynamic_cast<Hairpin *>(object);
+        Hairpin *hairpin = vrv_cast<Hairpin *>(object);
         assert(hairpin);
         // haripin below by default;
-        m_place = (hairpin->GetPlaceAlternate()->GetBasic() != STAFFREL_basic_NONE)
-            ? hairpin->GetPlaceAlternate()->GetBasic()
-            : STAFFREL_basic_below;
+        m_place = (hairpin->GetPlace() != STAFFREL_NONE) ? hairpin->GetPlace() : STAFFREL_below;
     }
     else if (object->Is(HARM)) {
-        Harm *harm = dynamic_cast<Harm *>(object);
+        Harm *harm = vrv_cast<Harm *>(object);
         assert(harm);
         // harm above by default
-        m_place = (harm->GetPlaceAlternate()->GetBasic() != STAFFREL_basic_NONE) ? harm->GetPlaceAlternate()->GetBasic()
-                                                                                 : STAFFREL_basic_above;
-        if ((harm->GetPlaceAlternate()->GetBasic() == STAFFREL_basic_NONE) && object->GetFirst()->Is(FB))
-            m_place = STAFFREL_basic_below;
+        m_place = (harm->GetPlace() != STAFFREL_NONE) ? harm->GetPlace() : STAFFREL_above;
+        if ((harm->GetPlace() == STAFFREL_NONE) && object->GetFirst()->Is(FB)) m_place = STAFFREL_below;
     }
     else if (object->Is(MORDENT)) {
-        Mordent *mordent = dynamic_cast<Mordent *>(object);
+        Mordent *mordent = vrv_cast<Mordent *>(object);
         assert(mordent);
         // mordent above by default;
-        m_place = (mordent->GetPlaceAlternate()->GetBasic() != STAFFREL_basic_NONE)
-            ? mordent->GetPlaceAlternate()->GetBasic()
-            : STAFFREL_basic_above;
+        m_place = (mordent->GetPlace() != STAFFREL_NONE) ? mordent->GetPlace() : mordent->GetLayerPlace(STAFFREL_above);
     }
     else if (object->Is(OCTAVE)) {
-        Octave *octave = dynamic_cast<Octave *>(object);
+        Octave *octave = vrv_cast<Octave *>(object);
         assert(octave);
         // octave below by default (won't draw without @dis.place anyway);
-        m_place = (octave->GetDisPlace() == STAFFREL_basic_above) ? STAFFREL_basic_above : STAFFREL_basic_below;
+        m_place = (octave->GetDisPlace() == STAFFREL_basic_above) ? STAFFREL_above : STAFFREL_below;
+    }
+    else if (object->Is(PITCHINFLECTION)) {
+        // PitchInflection *pitchInflection = vrv_cast<PitchInflection *>(object);
+        // assert(pitchInflection);
+        // pitchInflection above by default;
+        // m_place = (pitchInflection->GetPlace() != STAFFREL_NONE) ? pitchInflection->GetPlace() : STAFFREL_above;
+        m_place = STAFFREL_above;
     }
     else if (object->Is(PEDAL)) {
-        Pedal *pedal = dynamic_cast<Pedal *>(object);
+        Pedal *pedal = vrv_cast<Pedal *>(object);
         assert(pedal);
         // pedal below by default
-        m_place = (pedal->GetPlaceAlternate()->GetBasic() != STAFFREL_basic_NONE)
-            ? pedal->GetPlaceAlternate()->GetBasic()
-            : STAFFREL_basic_below;
+        m_place = (pedal->GetPlace() != STAFFREL_NONE) ? pedal->GetPlace() : STAFFREL_below;
+    }
+    else if (object->Is(REH)) {
+        Reh *reh = vrv_cast<Reh *>(object);
+        assert(reh);
+        // reh above by default
+        m_place = (reh->GetPlace() != STAFFREL_NONE) ? reh->GetPlace() : STAFFREL_above;
     }
     else if (object->Is(TEMPO)) {
-        Tempo *tempo = dynamic_cast<Tempo *>(object);
+        Tempo *tempo = vrv_cast<Tempo *>(object);
         assert(tempo);
         // tempo above by default;
-        m_place = (tempo->GetPlaceAlternate()->GetBasic() != STAFFREL_basic_NONE)
-            ? tempo->GetPlaceAlternate()->GetBasic()
-            : STAFFREL_basic_above;
+        m_place = (tempo->GetPlace() != STAFFREL_NONE) ? tempo->GetPlace() : STAFFREL_above;
     }
     else if (object->Is(TRILL)) {
-        Trill *trill = dynamic_cast<Trill *>(object);
+        Trill *trill = vrv_cast<Trill *>(object);
         assert(trill);
+        trill->GetStart();
         // trill above by default;
-        m_place = (trill->GetPlaceAlternate()->GetBasic() != STAFFREL_basic_NONE)
-            ? trill->GetPlaceAlternate()->GetBasic()
-            : STAFFREL_basic_above;
+        m_place = (trill->GetPlace() != STAFFREL_NONE) ? trill->GetPlace() : trill->GetLayerPlace(STAFFREL_above);
     }
     else if (object->Is(TURN)) {
-        Turn *turn = dynamic_cast<Turn *>(object);
+        Turn *turn = vrv_cast<Turn *>(object);
         assert(turn);
         // turn above by default;
-        m_place = (turn->GetPlaceAlternate()->GetBasic() != STAFFREL_basic_NONE) ? turn->GetPlaceAlternate()->GetBasic()
-                                                                                 : STAFFREL_basic_above;
+        m_place = (turn->GetPlace() != STAFFREL_NONE) ? turn->GetPlace() : turn->GetLayerPlace(STAFFREL_above);
     }
     else {
-        m_place = STAFFREL_basic_NONE;
+        m_place = STAFFREL_NONE;
     }
     ResetPositioner();
 }
@@ -264,14 +287,6 @@ void FloatingPositioner::ResetPositioner()
 
     m_drawingYRel = 0;
     m_drawingXRel = 0;
-    m_cuvrePoints[0] = Point(0, 0);
-    m_cuvrePoints[1] = Point(0, 0);
-    m_cuvrePoints[2] = Point(0, 0);
-    m_cuvrePoints[3] = Point(0, 0);
-    m_cuvreAngle = 0.0;
-    m_cuvreThickness = 0;
-    m_cuvreDir = curvature_CURVEDIR_NONE;
-    m_cuvreXMinMaxY = -1;
 }
 
 int FloatingPositioner::GetDrawingX() const
@@ -305,53 +320,25 @@ void FloatingPositioner::SetObjectXY(Object *objectX, Object *objectY)
     m_objectY = objectY;
 }
 
-void FloatingPositioner::UpdateCurvePosition(
-    const Point points[4], float angle, int thickness, curvature_CURVEDIR curveDir)
-{
-    m_cuvrePoints[0] = points[0];
-    m_cuvrePoints[1] = points[1];
-    m_cuvrePoints[2] = points[2];
-    m_cuvrePoints[3] = points[3];
-    m_cuvreAngle = angle;
-    m_cuvreThickness = thickness;
-    m_cuvreDir = curveDir;
-    m_cuvreXMinMaxY = -1;
-}
-
-int FloatingPositioner::CalcXMinMaxY(const Point points[4])
-{
-    assert(this->GetObject());
-    assert(this->GetObject()->Is({ SLUR, TIE }));
-    assert(m_cuvreDir != curvature_CURVEDIR_NONE);
-
-    if (m_cuvreXMinMaxY != -1) return m_cuvreXMinMaxY;
-    Point pos;
-    int width, height;
-    int minYPos, maxYPos;
-
-    BoundingBox::ApproximateBezierBoundingBox(points, pos, width, height, minYPos, maxYPos);
-    if (m_cuvreDir == curvature_CURVEDIR_above)
-        m_cuvreXMinMaxY = maxYPos;
-    else
-        m_cuvreXMinMaxY = minYPos;
-
-    return m_cuvreXMinMaxY;
-}
-
 void FloatingPositioner::SetDrawingXRel(int drawingXRel)
 {
     ResetCachedDrawingX();
     m_drawingXRel = drawingXRel;
 }
 
-void FloatingPositioner::SetDrawingYRel(int drawingYRel)
+void FloatingPositioner::SetDrawingYRel(int drawingYRel, bool force)
 {
-    ResetCachedDrawingY();
-    if (m_place == STAFFREL_basic_above) {
-        if (drawingYRel < m_drawingYRel) m_drawingYRel = drawingYRel;
+    bool setValue = force;
+    if (m_place == STAFFREL_above) {
+        if (drawingYRel < m_drawingYRel) setValue = true;
     }
     else {
-        if (drawingYRel > m_drawingYRel) m_drawingYRel = drawingYRel;
+        if (drawingYRel > m_drawingYRel) setValue = true;
+    }
+
+    if (setValue) {
+        ResetCachedDrawingY();
+        m_drawingYRel = drawingYRel;
     }
 }
 
@@ -364,67 +351,340 @@ bool FloatingPositioner::CalcDrawingYRel(Doc *doc, StaffAlignment *staffAlignmen
     int yRel;
 
     if (horizOverlapingBBox == NULL) {
-        if (this->m_place == STAFFREL_basic_above) {
-            yRel = GetContentY1();
-            yRel -= doc->GetBottomMargin(this->m_object->GetClassId()) * doc->GetDrawingUnit(staffSize);
+        // Apply element margin and enforce minimal staff distance
+        int staffIndex = staffAlignment->GetStaff()->GetN();
+        int minStaffDistance
+            = doc->GetStaffDistance(m_object->GetClassId(), staffIndex, m_place) * doc->GetDrawingUnit(staffSize);
+        if (m_place == STAFFREL_above) {
+            yRel = this->GetContentY1();
+            yRel -= doc->GetBottomMargin(m_object->GetClassId()) * doc->GetDrawingUnit(staffSize);
             this->SetDrawingYRel(yRel);
+            this->SetDrawingYRel(-minStaffDistance);
         }
         else {
-            yRel = staffAlignment->GetStaffHeight() + GetContentY2();
-            yRel += doc->GetTopMargin(this->m_object->GetClassId()) * doc->GetDrawingUnit(staffSize);
+            yRel = staffAlignment->GetStaffHeight() + this->GetContentY2();
+            yRel += doc->GetTopMargin(m_object->GetClassId()) * doc->GetDrawingUnit(staffSize);
             this->SetDrawingYRel(yRel);
+            this->SetDrawingYRel(minStaffDistance + staffAlignment->GetStaffHeight());
         }
     }
     else {
-        FloatingPositioner *curve = dynamic_cast<FloatingPositioner *>(horizOverlapingBBox);
+        FloatingCurvePositioner *curve = dynamic_cast<FloatingCurvePositioner *>(horizOverlapingBBox);
         if (curve) {
             assert(curve->m_object);
         }
-        int margin = doc->GetBottomMargin(this->m_object->GetClassId()) * doc->GetDrawingUnit(staffSize);
+        int margin = doc->GetBottomMargin(m_object->GetClassId()) * doc->GetDrawingUnit(staffSize);
 
-        if (this->m_place == STAFFREL_basic_above) {
-            if (curve && curve->m_object->Is({ SLUR, TIE })) {
-                int shift = this->Intersects(curve, doc->GetDrawingUnit(staffSize));
+        if (m_place == STAFFREL_above) {
+            if (curve && curve->m_object->Is({ LV, PHRASE, SLUR, TIE })) {
+                const int shift = this->Intersects(curve, CONTENT, doc->GetDrawingUnit(staffSize));
                 if (shift != 0) {
                     this->SetDrawingYRel(this->GetDrawingYRel() - shift);
-                    // LogDebug("Shift %d", shift);
                 }
                 return true;
             }
-            yRel = -staffAlignment->CalcOverflowAbove(horizOverlapingBBox) + GetContentY1() - margin;
+            else if (m_object->Is(DYNAM) && horizOverlapingBBox->Is(BEAM)) {
+                // Try to avoid comparing with BEAM BB since it might be much larger overlap while having a lot of
+                // whitespace. For such cases, DYNAM should be compared to individual elements of BEAM instead
+                return true;
+            }
+            yRel = -staffAlignment->CalcOverflowAbove(horizOverlapingBBox) + this->GetContentY1() - margin;
+
             Object *object = dynamic_cast<Object *>(horizOverlapingBBox);
+            // For elements, that can have extender lines, we need to make sure that they continue in next system on the
+            // same height, as they were before (even if there are no overlapping elements in subsequent measures)
+            if (m_object->Is({ DIR, DYNAM }) && m_object->IsExtenderElement()) {
+                m_object->SetMaxDrawingYRel(yRel);
+                this->SetDrawingYRel(std::min(yRel, m_object->GetMaxDrawingYRel()));
+            }
             // With LayerElement always move them up
-            if (object && object->IsLayerElement()) {
+            else if (object && object->IsLayerElement()) {
                 if (yRel < 0) this->SetDrawingYRel(yRel);
             }
-            // Otherwise only if the is a vertical overlap
+            // Otherwise only if there is a vertical overlap
             else if (this->VerticalContentOverlap(horizOverlapingBBox, margin)) {
                 this->SetDrawingYRel(yRel);
             }
         }
         else {
-            if (curve && curve->m_object->Is({ SLUR, TIE })) {
-                int shift = this->Intersects(curve, doc->GetDrawingUnit(staffSize));
+            if (curve && curve->m_object->Is({ LV, PHRASE, SLUR, TIE })) {
+                const int shift = this->Intersects(curve, CONTENT, doc->GetDrawingUnit(staffSize));
                 if (shift != 0) {
                     this->SetDrawingYRel(this->GetDrawingYRel() - shift);
-                    // LogDebug("Shift %d", shift);
                 }
                 return true;
             }
             yRel = staffAlignment->CalcOverflowBelow(horizOverlapingBBox) + staffAlignment->GetStaffHeight()
-                + GetContentY2() + margin;
+                + this->GetContentY2() + margin;
+
             Object *object = dynamic_cast<Object *>(horizOverlapingBBox);
+            // For elements, that can have extender lines, we need to make sure that they continue in next system on the
+            // same height, as they were before (even if there are no overlapping elements in subsequent measures)
+            if (m_object->Is({ DIR, DYNAM }) && m_object->IsExtenderElement()) {
+                m_object->SetMaxDrawingYRel(yRel);
+                this->SetDrawingYRel(std::max(yRel, m_object->GetMaxDrawingYRel()));
+            }
             // With LayerElement always move them down
-            if (object && object->IsLayerElement()) {
+            else if (object && object->IsLayerElement()) {
                 if (yRel > 0) this->SetDrawingYRel(yRel);
             }
-            // Otherwise only if the is a vertical overlap
+            // Otherwise only if there is a vertical overlap
             else if (this->VerticalContentOverlap(horizOverlapingBBox, margin)) {
                 this->SetDrawingYRel(yRel);
             }
         }
     }
     return true;
+}
+
+int FloatingPositioner::GetSpaceBelow(Doc *doc, StaffAlignment *staffAlignment, BoundingBox *horizOverlapingBBox)
+{
+    if (m_place != STAFFREL_between) return VRV_UNSET;
+
+    int staffSize = staffAlignment->GetStaffSize();
+
+    FloatingCurvePositioner *curve = dynamic_cast<FloatingCurvePositioner *>(horizOverlapingBBox);
+    if (curve) {
+        assert(curve->m_object);
+    }
+    int margin = doc->GetBottomMargin(m_object->GetClassId()) * doc->GetDrawingUnit(staffSize);
+
+    if (curve && curve->m_object->Is({ LV, PHRASE, SLUR, TIE })) {
+        // For now ignore curves
+        return 0;
+    }
+
+    return this->GetContentBottom() - horizOverlapingBBox->GetSelfTop() - margin;
+}
+
+//----------------------------------------------------------------------------
+// FloatingCurvePositioner
+//----------------------------------------------------------------------------
+
+FloatingCurvePositioner::FloatingCurvePositioner(FloatingObject *object, StaffAlignment *alignment, char spanningType)
+    : FloatingPositioner(object, alignment, spanningType)
+{
+    ResetCurveParams();
+}
+
+FloatingCurvePositioner::~FloatingCurvePositioner()
+{
+    ClearSpannedElements();
+}
+
+void FloatingCurvePositioner::ResetPositioner()
+{
+    FloatingPositioner::ResetPositioner();
+
+    ResetCurveParams();
+}
+
+void FloatingCurvePositioner::ClearSpannedElements()
+{
+    for (auto &spannedElement : m_spannedElements) {
+        delete spannedElement;
+    }
+    m_spannedElements.clear();
+}
+
+void FloatingCurvePositioner::ResetCurveParams()
+{
+    m_points[0] = Point(0, 0);
+    m_points[1] = Point(0, 0);
+    m_points[2] = Point(0, 0);
+    m_points[3] = Point(0, 0);
+    m_angle = 0.0;
+    m_thickness = 0;
+    m_dir = curvature_CURVEDIR_NONE;
+    m_crossStaff = NULL;
+    m_cachedMinMaxY = VRV_UNSET;
+    ClearSpannedElements();
+}
+
+void FloatingCurvePositioner::UpdateCurveParams(
+    const Point points[4], float angle, int thickness, curvature_CURVEDIR curveDir)
+{
+    m_points[0] = points[0];
+    m_points[1] = points[1];
+    m_points[2] = points[2];
+    m_points[3] = points[3];
+    int currentY = this->GetDrawingY();
+    m_points[0].y -= currentY;
+    m_points[1].y -= currentY;
+    m_points[2].y -= currentY;
+    m_points[3].y -= currentY;
+    m_angle = angle;
+    m_thickness = thickness;
+    m_dir = curveDir;
+    m_cachedMinMaxY = VRV_UNSET;
+}
+
+void FloatingCurvePositioner::UpdatePoints(const BezierCurve &bezier)
+{
+    Point points[4];
+    points[0] = bezier.p1;
+    points[1] = bezier.c1;
+    points[2] = bezier.c2;
+    points[3] = bezier.p2;
+    this->UpdateCurveParams(points, m_angle, m_thickness, m_dir);
+}
+
+void FloatingCurvePositioner::MoveFrontVertical(int distance)
+{
+    m_points[0].y += distance;
+    m_points[1].y += distance;
+}
+
+void FloatingCurvePositioner::MoveBackVertical(int distance)
+{
+    m_points[2].y += distance;
+    m_points[3].y += distance;
+}
+
+int FloatingCurvePositioner::CalcMinMaxY(const Point points[4])
+{
+    assert(this->GetObject());
+    assert(this->GetObject()->Is({ LV, PHRASE, SLUR, TIE }));
+    assert(m_dir != curvature_CURVEDIR_NONE);
+
+    if (m_cachedMinMaxY != VRV_UNSET) return m_cachedMinMaxY;
+    Point pos;
+    int width, height;
+    int minYPos, maxYPos;
+
+    BoundingBox::ApproximateBezierBoundingBox(points, pos, width, height, minYPos, maxYPos);
+    m_cachedMinMaxY = (m_dir == curvature_CURVEDIR_above) ? maxYPos : minYPos;
+
+    return m_cachedMinMaxY;
+}
+
+int FloatingCurvePositioner::CalcAdjustment(BoundingBox *boundingBox, bool &discard, int margin, bool horizontalOverlap)
+{
+    int leftAdjustment, rightAdjustment;
+    std::tie(leftAdjustment, rightAdjustment)
+        = CalcLeftRightAdjustment(boundingBox, discard, margin, horizontalOverlap);
+    return std::max(leftAdjustment, rightAdjustment);
+}
+
+std::pair<int, int> FloatingCurvePositioner::CalcLeftRightAdjustment(
+    BoundingBox *boundingBox, bool &discard, int margin, bool horizontalOverlap)
+{
+    assert(boundingBox);
+    assert(boundingBox->HasSelfBB());
+
+    Point points[4];
+    // We need to get the points because then stored points are relative
+    this->GetPoints(points);
+
+    // for lisability
+    Point p1 = points[0];
+    Point p2 = points[3];
+
+    Accessor type = SELF;
+    // bool keepInside = element->Is({ARTIC, ARTIC_PART, NOTE, STEM}));
+    // The idea is to force only some of the elements to be inside a slur.
+    // However, this currently does work because skipping an adjustment can cause collision later depending on how
+    // the slur is eventually adjusted. Keeping everything inside now.
+    bool keepInside = true;
+    discard = false;
+
+    // first check if they overlap at all
+    if (horizontalOverlap) {
+        if (p2.x < boundingBox->GetLeftBy(type) - margin) return { 0, 0 };
+        if (p1.x > boundingBox->GetRightBy(type) + margin) return { 0, 0 };
+    }
+
+    Point topBezier[4], bottomBezier[4];
+    BoundingBox::CalcThickBezier(points, this->GetThickness(), this->GetAngle(), topBezier, bottomBezier);
+
+    // Now calculate the left and right adjustments
+    int leftAdjustment = 0;
+    int rightAdjustment = 0;
+
+    if (this->GetDir() == curvature_CURVEDIR_above) {
+        // The curve is below the content - if the element needs to be kept inside (e.g. a note), then do not return.
+        if (((this->GetTopBy(type) + margin) < boundingBox->GetBottomBy(type)) && !keepInside) {
+            return { 0, 0 };
+        }
+        int leftY = 0;
+        int rightY = 0;
+        // The curve overflows on both sides
+        if ((p1.x < boundingBox->GetLeftBy(type)) && p2.x > boundingBox->GetRightBy(type)) {
+            // calculate the y positions
+            leftY = BoundingBox::CalcBezierAtPosition(bottomBezier, boundingBox->GetLeftBy(type)) - margin;
+            rightY = BoundingBox::CalcBezierAtPosition(bottomBezier, boundingBox->GetRightBy(type)) - margin;
+        }
+        // The curve overflows on the left
+        else if ((p1.x < boundingBox->GetLeftBy(type)) && p2.x <= boundingBox->GetRightBy(type)) {
+            leftY = BoundingBox::CalcBezierAtPosition(bottomBezier, boundingBox->GetLeftBy(type)) - margin;
+            rightY = p2.y - margin;
+        }
+        // The curve overflows on the right
+        else if ((p1.x >= boundingBox->GetLeftBy(type)) && p2.x > boundingBox->GetRightBy(type)) {
+            leftY = p1.y - margin;
+            rightY = BoundingBox::CalcBezierAtPosition(bottomBezier, boundingBox->GetRightBy(type)) - margin;
+        }
+        // The curve is inside the left and right side of the content
+        else {
+            leftY = p1.y - margin;
+            rightY = p2.y - margin;
+        }
+
+        leftAdjustment = std::max(boundingBox->GetTopBy(type) - leftY, 0);
+        rightAdjustment = std::max(boundingBox->GetTopBy(type) - rightY, 0);
+    }
+    else {
+        // The curve is below the content - if the element needs to be kept inside (e.g. a note), then do not return.
+        if (((this->GetTopBy(type) + margin) < boundingBox->GetBottomBy(type)) && !keepInside) {
+            return { 0, 0 };
+        }
+        int leftY = 0;
+        int rightY = 0;
+        // The curve overflows on both sides
+        if ((p1.x < boundingBox->GetLeftBy(type)) && p2.x > boundingBox->GetRightBy(type)) {
+            // calculate the y positions
+            leftY = BoundingBox::CalcBezierAtPosition(topBezier, boundingBox->GetLeftBy(type)) + margin;
+            rightY = BoundingBox::CalcBezierAtPosition(topBezier, boundingBox->GetRightBy(type)) + margin;
+        }
+        // The curve overflows on the left
+        else if ((p1.x < boundingBox->GetLeftBy(type)) && p2.x <= boundingBox->GetRightBy(type)) {
+            leftY = BoundingBox::CalcBezierAtPosition(topBezier, boundingBox->GetLeftBy(type)) + margin;
+            rightY = p2.y + margin;
+        }
+        // The curve overflows on the right
+        else if ((p1.x >= boundingBox->GetLeftBy(type)) && p2.x > boundingBox->GetRightBy(type)) {
+            leftY = p1.y + margin;
+            rightY = BoundingBox::CalcBezierAtPosition(topBezier, boundingBox->GetRightBy(type)) + margin;
+        }
+        // The curve is inside the left and right side of the content
+        else {
+            leftY = p1.y + margin;
+            rightY = p2.y + margin;
+        }
+
+        leftAdjustment = std::max(leftY - boundingBox->GetBottomBy(type), 0);
+        rightAdjustment = std::max(rightY - boundingBox->GetBottomBy(type), 0);
+    }
+
+    if ((leftAdjustment == 0) && (rightAdjustment == 0)) {
+        // Everything is above or below - we can discard the element
+        discard = true;
+    }
+
+    return { leftAdjustment, rightAdjustment };
+}
+
+void FloatingCurvePositioner::GetPoints(Point points[4]) const
+{
+    points[0] = m_points[0];
+    points[1] = m_points[1];
+    points[2] = m_points[2];
+    points[3] = m_points[3];
+    int currentY = this->GetDrawingY();
+    points[0].y += currentY;
+    points[1].y += currentY;
+    points[2].y += currentY;
+    points[3].y += currentY;
 }
 
 //----------------------------------------------------------------------------

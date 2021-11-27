@@ -13,6 +13,9 @@
 
 //----------------------------------------------------------------------------
 
+#include "functorparams.h"
+#include "iomei.h"
+#include "page.h"
 #include "pages.h"
 #include "score.h"
 #include "vrv.h"
@@ -23,7 +26,9 @@ namespace vrv {
 // Mdiv
 //----------------------------------------------------------------------------
 
-Mdiv::Mdiv() : Object("mdiv-"), AttLabelled(), AttNNumberLike()
+static const ClassRegistrar<Mdiv> s_factory("mdiv", MDIV);
+
+Mdiv::Mdiv() : PageElement(MDIV, "mdiv-"), PageElementStartInterface(), AttLabelled(), AttNNumberLike()
 {
     RegisterAttClass(ATT_LABELLED);
     RegisterAttClass(ATT_NNUMBERLIKE);
@@ -42,32 +47,25 @@ void Mdiv::Reset()
     m_visibility = Hidden;
 }
 
-void Mdiv::AddChild(Object *child)
+bool Mdiv::IsSupportedChild(Object *child)
 {
     if (child->Is(MDIV)) {
         assert(dynamic_cast<Mdiv *>(child));
-    }
-    else if (child->Is(PAGES)) {
-        assert(dynamic_cast<Pages *>(child));
     }
     else if (child->Is(SCORE)) {
         assert(dynamic_cast<Score *>(child));
     }
     else {
-        LogError("Adding '%s' to a '%s'", child->GetClassName().c_str(), this->GetClassName().c_str());
-        assert(false);
+        return false;
     }
-
-    child->SetParent(this);
-    m_children.push_back(child);
-    Modify();
+    return true;
 }
 
 void Mdiv::MakeVisible()
 {
     m_visibility = Visible;
     if (GetParent() && GetParent()->Is(MDIV)) {
-        Mdiv *parent = dynamic_cast<Mdiv *>(GetParent());
+        Mdiv *parent = vrv_cast<Mdiv *>(GetParent());
         assert(parent);
         parent->MakeVisible();
     }
@@ -76,5 +74,51 @@ void Mdiv::MakeVisible()
 //----------------------------------------------------------------------------
 // Functor methods
 //----------------------------------------------------------------------------
+
+int Mdiv::Save(FunctorParams *functorParams)
+{
+    SaveParams *params = vrv_params_cast<SaveParams *>(functorParams);
+    assert(params);
+
+    MEIOutput *meiOutput = dynamic_cast<MEIOutput *>(params->m_output);
+    if (m_visibility == Hidden && meiOutput) {
+        // Do not output hidden mdivs in page-based MEI or when saving a single score-based MEI page
+        if (!meiOutput->GetScoreBasedMEI() || meiOutput->IsSavingSinglePage()) return FUNCTOR_SIBLINGS;
+    }
+    return Object::Save(functorParams);
+}
+
+int Mdiv::SaveEnd(FunctorParams *functorParams)
+{
+    SaveParams *params = vrv_params_cast<SaveParams *>(functorParams);
+    assert(params);
+
+    MEIOutput *meiOutput = dynamic_cast<MEIOutput *>(params->m_output);
+    if (m_visibility == Hidden && meiOutput) {
+        // Do not output hidden mdivs in page-based MEI or when saving a single score-based MEI page
+        if (!meiOutput->GetScoreBasedMEI() || meiOutput->IsSavingSinglePage()) return FUNCTOR_SIBLINGS;
+    }
+    return Object::SaveEnd(functorParams);
+}
+
+int Mdiv::ConvertToPageBased(FunctorParams *functorParams)
+{
+    ConvertToPageBasedParams *params = vrv_params_cast<ConvertToPageBasedParams *>(functorParams);
+    assert(params);
+
+    this->MoveItselfTo(params->m_page);
+
+    return FUNCTOR_CONTINUE;
+}
+
+int Mdiv::ConvertToPageBasedEnd(FunctorParams *functorParams)
+{
+    ConvertToPageBasedParams *params = vrv_params_cast<ConvertToPageBasedParams *>(functorParams);
+    assert(params);
+
+    if (m_visibility == Visible) ConvertToPageBasedBoundary(this, params->m_page);
+
+    return FUNCTOR_CONTINUE;
+}
 
 } // namespace vrv

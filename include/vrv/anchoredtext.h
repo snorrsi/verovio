@@ -31,23 +31,23 @@ public:
     ///@{
     AnchoredText();
     virtual ~AnchoredText();
-    virtual void Reset();
-    virtual std::string GetClassName() const { return "AnchoredText"; }
-    virtual ClassId GetClassId() const { return ANCHORED_TEXT; }
+    Object *Clone() const override { return new AnchoredText(*this); }
+    void Reset() override;
+    std::string GetClassName() const override { return "AnchoredText"; }
     ///@}
 
     /**
      * @name Getter to interfaces
      */
     ///@{
-    virtual TextDirInterface *GetTextDirInterface() { return dynamic_cast<TextDirInterface *>(this); }
+    TextDirInterface *GetTextDirInterface() override { return dynamic_cast<TextDirInterface *>(this); }
     ///@}
 
     /**
      * Add an element (text, rend. etc.) to a tempo.
      * Only supported elements will be actually added to the child list.
      */
-    virtual void AddChild(Object *object);
+    bool IsSupportedChild(Object *object) override;
 
     //----------//
     // Functors //

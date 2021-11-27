@@ -30,16 +30,15 @@ public:
     ///@{
     Num();
     virtual ~Num();
-    virtual Object *Clone() const { return new Num(*this); }
-    virtual void Reset();
-    virtual std::string GetClassName() const { return "Num"; }
-    virtual ClassId GetClassId() const { return NUM; }
+    Object *Clone() const override { return new Num(*this); }
+    void Reset() override;
+    std::string GetClassName() const override { return "Num"; }
     ///@}
 
     /**
      * Add an element (text) to a num.
      */
-    virtual void AddChild(Object *object);
+    bool IsSupportedChild(Object *object) override;
 
     /**
      * Return a pointer to the current text object.

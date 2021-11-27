@@ -29,16 +29,16 @@ public:
     ///@{
     Fb();
     virtual ~Fb();
-    virtual void Reset();
-    virtual std::string GetClassName() const { return "Fb"; }
-    virtual ClassId GetClassId() const { return FB; }
+    Object *Clone() const override { return new Fb(*this); }
+    void Reset() override;
+    std::string GetClassName() const override { return "Fb"; }
     ///@}
 
     /**
      * Add an element (f) to an fb.
      * Only supported elements will be actually added to the child list.
      */
-    virtual void AddChild(Object *object);
+    bool IsSupportedChild(Object *object) override;
 
 private:
     //

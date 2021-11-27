@@ -9,7 +9,8 @@
 #define __VRV_MDIV_H__
 
 #include "atts_shared.h"
-#include "object.h"
+#include "pageboundary.h"
+#include "pageelement.h"
 
 namespace vrv {
 
@@ -18,9 +19,9 @@ namespace vrv {
 //----------------------------------------------------------------------------
 
 /**
- * This class represent a <pages> in page-based MEI.
+ * This class represent a <mdiv> in page-based MEI.
  */
-class Mdiv : public Object, public AttLabelled, public AttNNumberLike {
+class Mdiv : public PageElement, public PageElementStartInterface, public AttLabelled, public AttNNumberLike {
 
 public:
     /**
@@ -30,16 +31,16 @@ public:
     ///@{
     Mdiv();
     virtual ~Mdiv();
-    virtual void Reset();
-    virtual std::string GetClassName() const { return "Mdiv"; }
-    virtual ClassId GetClassId() const { return MDIV; }
+    Object *Clone() const override { return new Mdiv(*this); }
+    void Reset() override;
+    std::string GetClassName() const override { return "Mdiv"; }
     ///@}
 
     /**
      * @name Methods for adding allowed content
      */
     ///@{
-    virtual void AddChild(Object *object);
+    bool IsSupportedChild(Object *object) override;
     ///@}
 
     /**
@@ -50,6 +51,23 @@ public:
     //----------//
     // Functors //
     //----------//
+
+    /**
+     * See Object::Save
+     * Invisible Mdiv elements are not saved in page-based MEI
+     */
+    ///@{
+    int Save(FunctorParams *functorParams) override;
+    int SaveEnd(FunctorParams *functorParams) override;
+    ///@}
+
+    /**
+     * See Object::ConvertToPageBased
+     */
+    ///@{
+    int ConvertToPageBased(FunctorParams *functorParams) override;
+    int ConvertToPageBasedEnd(FunctorParams *functorParams) override;
+    ///@}
 
 private:
     //

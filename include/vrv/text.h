@@ -29,19 +29,18 @@ public:
     ///@{
     Text();
     virtual ~Text();
-    virtual Object *Clone() const { return new Text(*this); }
-    virtual void Reset();
-    virtual std::string GetClassName() const { return "Text"; }
-    virtual ClassId GetClassId() const { return TEXT; }
+    Object *Clone() const override { return new Text(*this); }
+    void Reset() override;
+    std::string GetClassName() const override { return "Text"; }
     ///@}
 
     /**
      * @name Set and get the text content.
      * The text content is a std::wstring that needs to be converted to UTF16.
-     * See MeiInput::ReadText and MeiInput ::WriteText
+     * See MEIInput::ReadText and MEIInput ::WriteText
      */
     ///@{
-    void SetText(std::wstring text) { m_text = text; }
+    void SetText(const std::wstring &text) { m_text = text; }
     std::wstring GetText() const { return m_text; }
     ///@}
 

@@ -10,6 +10,7 @@
 
 #include "atts_cmn.h"
 #include "atts_cmnornaments.h"
+#include "atts_externalsymbols.h"
 #include "controlelement.h"
 #include "timeinterface.h"
 
@@ -25,8 +26,12 @@ namespace vrv {
 class Trill : public ControlElement,
               public TimeSpanningInterface,
               public AttColor,
+              public AttExtender,
+              public AttExtSym,
+              public AttLineRend,
+              public AttNNumberLike,
               public AttOrnamentAccid,
-              public AttPlacement {
+              public AttPlacementRelStaff {
 public:
     /**
      * @name Constructors, destructors, and other standard methods
@@ -35,18 +40,23 @@ public:
     ///@{
     Trill();
     virtual ~Trill();
-    virtual void Reset();
-    virtual std::string GetClassName() const { return "Trill"; }
-    virtual ClassId GetClassId() const { return TRILL; }
+    Object *Clone() const override { return new Trill(*this); }
+    void Reset() override;
+    std::string GetClassName() const override { return "Trill"; }
     ///@}
 
     /**
      * @name Getter to interfaces
      */
     ///@{
-    virtual TimePointInterface *GetTimePointInterface() { return dynamic_cast<TimePointInterface *>(this); }
-    virtual TimeSpanningInterface *GetTimeSpanningInterface() { return dynamic_cast<TimeSpanningInterface *>(this); }
+    TimePointInterface *GetTimePointInterface() override { return dynamic_cast<TimePointInterface *>(this); }
+    TimeSpanningInterface *GetTimeSpanningInterface() override { return dynamic_cast<TimeSpanningInterface *>(this); }
     ///@}
+
+    /**
+     * Get the SMuFL glyph for the trill based on glyph.num
+     */
+    wchar_t GetTrillGlyph() const;
 
     //----------//
     // Functors //

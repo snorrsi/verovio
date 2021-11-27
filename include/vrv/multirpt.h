@@ -31,9 +31,9 @@ public:
     ///@{
     MultiRpt();
     virtual ~MultiRpt();
-    virtual void Reset();
-    virtual std::string GetClassName() const { return "MultiRpt"; }
-    virtual ClassId GetClassId() const { return MULTIRPT; }
+    Object *Clone() const override { return new MultiRpt(*this); }
+    void Reset() override;
+    std::string GetClassName() const override { return "MultiRpt"; }
     ///@}
 
 private:

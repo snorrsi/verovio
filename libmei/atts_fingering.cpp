@@ -72,7 +72,7 @@ bool AttFingGrpLog::HasForm() const
 
 /* include <attform> */
 
-bool Att::SetFingering(Object *element, std::string attrType, std::string attrValue)
+bool Att::SetFingering(Object *element, const std::string &attrType, const std::string &attrValue)
 {
     if (element->HasAttClass(ATT_FINGGRPLOG)) {
         AttFingGrpLog *att = dynamic_cast<AttFingGrpLog *>(element);
@@ -92,7 +92,7 @@ void Att::GetFingering(const Object *element, ArrayOfStrAttr *attributes)
         const AttFingGrpLog *att = dynamic_cast<const AttFingGrpLog *>(element);
         assert(att);
         if (att->HasForm()) {
-            attributes->push_back(std::make_pair("form", att->FingGrpLogFormToStr(att->GetForm())));
+            attributes->push_back({ "form", att->FingGrpLogFormToStr(att->GetForm()) });
         }
     }
 }

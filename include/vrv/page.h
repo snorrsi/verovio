@@ -16,6 +16,7 @@ namespace vrv {
 class DeviceContext;
 class PrepareProcessingListsParams;
 class RunningElement;
+class Score;
 class Staff;
 class System;
 
@@ -37,22 +38,21 @@ public:
     ///@{
     Page();
     virtual ~Page();
-    virtual void Reset();
-    virtual std::string GetClassName() const { return "Page"; }
-    virtual ClassId GetClassId() const { return PAGE; }
+    void Reset() override;
+    std::string GetClassName() const override { return "Page"; }
     ///@}
 
     /**
      * @name Methods for adding allowed content
      */
     ///@{
-    virtual void AddChild(Object *object);
+    bool IsSupportedChild(Object *object) override;
     ///@}
 
     /**
      * Return the number of system (children are System object only)
      */
-    int GetSystemCount() const { return (int)m_children.size(); }
+    int GetSystemCount() const { return (int)GetChildren()->size(); }
 
     /**
      * @name Get and set the pixel per unit factor.
@@ -139,26 +139,44 @@ public:
     //----------//
 
     /**
+     * See Object::ScoreDefSetCurrentPage
+     */
+    int ScoreDefSetCurrentPageEnd(FunctorParams *functorParams) override;
+
+    /**
+     * See Object::UnscoreDefSetCurrent
+     */
+    int ScoreDefUnsetCurrent(FunctorParams *functorParams) override;
+
+    /**
      * Apply the Pixel Per Unit factor of the page to its elements.
      */
-    virtual int ApplyPPUFactor(FunctorParams *functorParams);
+    int ApplyPPUFactor(FunctorParams *functorParams) override;
 
     /**
      * See Object::ResetVerticalAlignment
      */
-    virtual int ResetVerticalAlignment(FunctorParams *functorParams);
+    int ResetVerticalAlignment(FunctorParams *functorParams) override;
 
     /**
      * See Object::AlignVertically
      */
     ///@{
-    virtual int AlignVerticallyEnd(FunctorParams *functorParams);
+    int AlignVerticallyEnd(FunctorParams *functorParams) override;
     ///@}
 
     /**
      * See Object::AlignSystems
      */
-    virtual int AlignSystems(FunctorParams *functorParams);
+    ///@{
+    int AlignSystems(FunctorParams *functorParams) override;
+    int AlignSystemsEnd(FunctorParams *functorParams) override;
+    ///@}
+
+    /**
+     * See Object::CastOffPages
+     */
+    int CastOffPagesEnd(FunctorParams *functorParams) override;
 
 private:
     /**
@@ -190,14 +208,35 @@ public:
      * Hold the top scoreDef of the page.
      * The value must be initialized by going through the whole score for finding
      * all the clef or key changes that might occur within the text.
-     * The value is initialized by the Object::SetCurrentScoreDef functor.
+     * The value is initialized by the Object::ScoreDefSetCurrent functor.
      */
     ScoreDef m_drawingScoreDef;
+
+    /**
+     * @name Pointers to the score at the beginning and end of the page
+     * Set in Page::ScoreDefSetCurrentPageEnd
+     */
+    ///@{
+    Score *m_score;
+    Score *m_scoreEnd;
+    ///@}
 
     /**
      * Temporary member that will be replace by its LibMEI equivalent in the next version of the page-based MEI
      */
     double m_PPUFactor;
+
+    /**
+     * The height that can be justified once the systems are aligned.
+     * Takes into account header and footer.
+     */
+    int m_drawingJustifiableHeight;
+
+    /**
+     * the sum of justification factors for each type of spacing in between
+     * systems and staves (staff, brace group, bracket group)
+     */
+    double m_justificationSum;
 
 private:
     /**

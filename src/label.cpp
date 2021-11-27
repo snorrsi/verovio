@@ -23,7 +23,9 @@ namespace vrv {
 // Label
 //----------------------------------------------------------------------------
 
-Label::Label() : Object("label-"), TextListInterface()
+static const ClassRegistrar<Label> s_factory("label", LABEL);
+
+Label::Label() : Object(LABEL, "label-"), TextListInterface()
 {
     Reset();
 }
@@ -35,19 +37,18 @@ void Label::Reset()
     Object::Reset();
 }
 
-void Label::AddChild(Object *child)
+bool Label::IsSupportedChild(Object *child)
 {
     if (child->Is({ LB, REND, TEXT })) {
         assert(dynamic_cast<TextElement *>(child));
     }
-    else {
-        LogError("Adding '%s' to a '%s'", child->GetClassName().c_str(), this->GetClassName().c_str());
-        assert(false);
+    else if (child->IsEditorialElement()) {
+        assert(dynamic_cast<EditorialElement *>(child));
     }
-
-    child->SetParent(this);
-    m_children.push_back(child);
-    Modify();
+    else {
+        return false;
+    }
+    return true;
 }
 
 //----------------------------------------------------------------------------
