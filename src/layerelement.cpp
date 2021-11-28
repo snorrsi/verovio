@@ -2369,7 +2369,7 @@ int LayerElement::CalcOnsetOffset(FunctorParams *functorParams)
 
     double incrementScoreTime;
 
-    if (/*this->Is(REST) || */this->Is(SPACE)) {
+    if (this->Is(SPACE)) {
         incrementScoreTime = this->GetAlignmentDuration(
             params->m_currentMensur, params->m_currentMeterSig, true, params->m_notationType);
         incrementScoreTime = incrementScoreTime / (DUR_MAX / DURATION_4);
@@ -2380,16 +2380,16 @@ int LayerElement::CalcOnsetOffset(FunctorParams *functorParams)
         incrementScoreTime = this->GetAlignmentDuration(
             params->m_currentMensur, params->m_currentMeterSig, true, params->m_notationType);
         incrementScoreTime = incrementScoreTime / (DUR_MAX / DURATION_4);
-        
+
         Rest *rest = dynamic_cast<Rest *>(this);
         assert(rest);
-        
+
         double realTimeIncrementSeconds = incrementScoreTime * 60.0 / params->m_currentTempo;
-        
+
         // LogDebug("Note Alignment Duration %f - Dur %d - Diatonic Pitch %d - Track %d", GetAlignmentDuration(),
         // note->GetNoteOrChordDur(this), note->GetDiatonicPitch(), *midiTrack);
         // LogDebug("Oct %d - Pname %d - Accid %d", note->GetOct(), note->GetPname(), note->GetAccid());
-        
+
         Rest *storeRest = rest;
         // When we have a @sameas, do store the onset / offset values of the pointed note in the pointing note
         if (this != element) {
@@ -2401,7 +2401,7 @@ int LayerElement::CalcOnsetOffset(FunctorParams *functorParams)
         storeRest->SetRealTimeOnsetSeconds(params->m_currentRealTimeSeconds);
         storeRest->SetScoreTimeOffset(params->m_currentScoreTime + incrementScoreTime);
         storeRest->SetRealTimeOffsetSeconds(params->m_currentRealTimeSeconds + realTimeIncrementSeconds);
-        
+
         params->m_currentScoreTime += incrementScoreTime;
         params->m_currentRealTimeSeconds += incrementScoreTime * 60.0 / params->m_currentTempo;
     }
