@@ -80,7 +80,7 @@ public:
      * This is valid only for CMN and for duration shorter than half notes.
      */
     wchar_t GetRestGlyph() const;
-                 
+
     /**
      * MIDI timing information
      */
@@ -99,7 +99,7 @@ public:
     double GetScoreTimeDuration() const;
     char GetMIDIPitch() const;
     ///@}
-                 
+
     //----------//
     // Functors //
     //----------//
@@ -148,8 +148,6 @@ public:
      * // SS See Object::GenerateTimemap
      */
     int GenerateTimemap(FunctorParams *functorParams) override;
-                 
-
                  
 private:
     /**
