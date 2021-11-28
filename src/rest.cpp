@@ -771,6 +771,11 @@ void Rest::SetScoreTimeTiedDuration(double scoreTime)
     m_scoreTimeTiedDuration = scoreTime;
 }
 
+void Rest::CalcMIDIPitch(int shift)
+{
+
+}
+
 double Rest::GetScoreTimeOnset() const
 {
     return m_scoreTimeOnset;
@@ -800,8 +805,12 @@ double Rest::GetScoreTimeDuration() const
 {
     return this->GetScoreTimeOffset() - this->GetScoreTimeOnset();
 }
-    
-    
+
+char Rest::GetMIDIPitch() const
+{
+    return -1;
+}
+
 int Rest::GenerateTimemap(FunctorParams *functorParams)
 {
     GenerateTimemapParams *params = dynamic_cast<GenerateTimemapParams *>(functorParams);

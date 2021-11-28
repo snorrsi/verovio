@@ -90,14 +90,14 @@ public:
     void SetScoreTimeOffset(double scoreTime);
     void SetRealTimeOffsetSeconds(double timeInSeconds);
     void SetScoreTimeTiedDuration(double timeInSeconds);
-    //void CalcMIDIPitch(int shift);
+    void CalcMIDIPitch(int shift);
     double GetScoreTimeOnset() const;
     double GetRealTimeOnsetMilliseconds() const;
     double GetScoreTimeOffset() const;
     double GetScoreTimeTiedDuration() const;
     double GetRealTimeOffsetMilliseconds() const;
     double GetScoreTimeDuration() const;
-    //char GetMIDIPitch() const;
+    char GetMIDIPitch() const;
     ///@}
                  
     //----------//
@@ -144,10 +144,9 @@ public:
      */
     int GetOptimalLayerLocation(Staff *staff, Layer *layer, int defaultLocation);
 
-    // SS
     /**
-    * See Object::GenerateTimemap
-    */
+     * // SS See Object::GenerateTimemap
+     */
     int GenerateTimemap(FunctorParams *functorParams) override;
                  
 
@@ -188,45 +187,42 @@ private:
 public:
     //
 private:
-// SS BEGIN
+    /**
+     * The score-time onset of the note in the measure (duration from the start of measure in
+     * quarter notes).
+     */
+    double m_scoreTimeOnset;
 
-                 /**
-                  * The score-time onset of the note in the measure (duration from the start of measure in
-                  * quarter notes).
-                  */
-                 double m_scoreTimeOnset;
-                 
-                 /**
-                  * The score-time off-time of the note in the measure (duration from the start of the measure
-                  * in quarter notes).  This is the duration of the printed note.  If the note is the start of
-                  * a tied group, the score time of the tied group is this variable plus m_scoreTimeTiedDuration.
-                  * If this note is a secondary note in a tied group, then this value is the score time end
-                  * of the printed note, and the m_scoreTimeTiedDuration is -1.0 to indicate that it should not
-                  * be exported when creating a MIDI file.
-                  */
-                 double m_scoreTimeOffset;
-                 
-                 /**
-                  * The time in milliseconds since the start of the measure element that contains the note.
-                  */
-                 int m_realTimeOnsetMilliseconds;
-                 
-                 /**
-                  * The time in milliseconds since the start of the measure element to end of printed note.
-                  * The real-time duration of a tied group is not currently tracked (this gets complicated
-                  * if there is a tempo change during a note sustain, which is currently not supported).
-                  */
-                 int m_realTimeOffsetMilliseconds;
-                 
-                 /**
-                  * If the note is the first in a tied group, then m_scoreTimeTiedDuration contains the
-                  * score-time duration (in quarter notes) of all tied notes in the group after this note.
-                  * If the note is a secondary note in a tied group, then this variable is set to -1.0 to
-                  * indicate that it should not be written to MIDI output.
-                  */
-                 double m_scoreTimeTiedDuration;
+    /**
+     * The score-time off-time of the note in the measure (duration from the start of the measure
+     * in quarter notes).  This is the duration of the printed note.  If the note is the start of
+     * a tied group, the score time of the tied group is this variable plus m_scoreTimeTiedDuration.
+     * If this note is a secondary note in a tied group, then this value is the score time end
+     * of the printed note, and the m_scoreTimeTiedDuration is -1.0 to indicate that it should not
+     * be exported when creating a MIDI file.
+     */
+    double m_scoreTimeOffset;
 
-// SS END
+    /**
+     * The time in milliseconds since the start of the measure element that contains the note.
+     */
+    double m_realTimeOnsetMilliseconds;
+
+    /**
+     * The time in milliseconds since the start of the measure element to end of printed note.
+     * The real-time duration of a tied group is not currently tracked (this gets complicated
+     * if there is a tempo change during a note sustain, which is currently not supported).
+     */
+    double m_realTimeOffsetMilliseconds;
+
+    /**
+     * If the note is the first in a tied group, then m_scoreTimeTiedDuration contains the
+     * score-time duration (in quarter notes) of all tied notes in the group after this note.
+     * If the note is a secondary note in a tied group, then this variable is set to -1.0 to
+     * indicate that it should not be written to MIDI output.
+     */
+    double m_scoreTimeTiedDuration;
+
 };
 
 } // namespace vrv
