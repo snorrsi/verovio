@@ -14,6 +14,7 @@
 
 #include "attdef.h"
 #include "vrv.h"
+#include <algorithm>
 
 namespace vrv {
 
