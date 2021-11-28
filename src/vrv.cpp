@@ -459,8 +459,9 @@ bool Check(Object *object)
 // Various helpers
 //----------------------------------------------------------------------------
 
-std::string RGBToHexStr(int red, int green, int blue) {
-    //int colorInt = ((blue | green << 8 | red << 16) | 1 << 24);
+std::string RGBToHexStr(int red, int green, int blue)
+{
+    // int colorInt = ((blue | green << 8 | red << 16) | 1 << 24);
     char tmp[8];
 
     std::snprintf(tmp, sizeof(tmp), "#%02x%02x%02x", red, green, blue);

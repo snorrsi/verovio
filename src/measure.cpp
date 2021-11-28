@@ -1072,7 +1072,7 @@ int Measure::AdjustXPos(FunctorParams *functorParams)
     }
     // Nothing if the measure has at least one note or @metcon="false"
     else if ((this->FindDescendantByType(NOTE) != NULL) || (this->GetMetcon() == BOOLEAN_false)) {
-        // SS        
+        // SS
         minMeasureWidth = 0;
     }
     // Adjust min width based on multirest attributes (@num and @width), but only if these values are larger than

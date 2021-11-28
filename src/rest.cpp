@@ -743,7 +743,7 @@ int Rest::Transpose(FunctorParams *functorParams)
 // SS BEGIN
 
 // Not functor functions, just keeping changed items together
-    
+
 void Rest::SetScoreTimeOnset(double scoreTime)
 {
     m_scoreTimeOnset = scoreTime;
@@ -824,26 +824,26 @@ int Rest::GenerateTimemap(FunctorParams *functorParams)
 
     double realTimeEnd = params->m_realTimeOffsetMilliseconds + rest->GetRealTimeOffsetMilliseconds();
     double scoreTimeEnd = params->m_scoreTimeOffset + rest->GetScoreTimeOffset();
-   
+
     // Should check if value for realTimeStart already exists and if so, then
     // ensure that it is equal to scoreTimeStart:
     params->realTimeToScoreTime[realTimeStart] = scoreTimeStart;
-    
+
     // Store the element ID in list to turn on at given time.
     params->realTimeToOnElements[realTimeStart].push_back(this->GetUuid());
-    
+
     // Should check if value for realTimeEnd already exists and if so, then
     // ensure that it is equal to scoreTimeEnd:
     params->realTimeToScoreTime[realTimeEnd] = scoreTimeEnd;
-    
+
     // Store the element ID in list to turn off at given time.
     params->realTimeToOffElements[realTimeEnd].push_back(this->GetUuid());
-    
+
     params->realTimeToTempo[realTimeStart] = params->m_currentTempo;
-    
+
     return FUNCTOR_SIBLINGS;
 }
 
 // SS END
-    
+
 } // namespace vrv

@@ -290,8 +290,8 @@ void SvgDeviceContext::StartGraphicSSNotation(Object *object, std::string gClass
 
         // Create midi note
 
-        //SS this is basicly same code as in note->GetMidiPitch
-        //SS should really use that. And only use this for unpitched notes.
+        // SS this is basicly same code as in note->GetMidiPitch
+        // SS should really use that. And only use this for unpitched notes.
 
         int midiBase = 0;
         data_PITCHNAME pname = note->GetPname();
@@ -322,7 +322,7 @@ void SvgDeviceContext::StartGraphicSSNotation(Object *object, std::string gClass
         }
         // Check for accidentals
         if (accid && accid->HasAccidGes()) {
-            //data_ACCIDENTAL_IMPLICIT accImp = accid->GetAccidGes();
+            // data_ACCIDENTAL_IMPLICIT accImp = accid->GetAccidGes();
             data_ACCIDENTAL_GESTURAL accImp = accid->GetAccidGes();
             switch (accImp) {
                 case ACCIDENTAL_GESTURAL_s: alter = 1; break;
@@ -340,7 +340,7 @@ void SvgDeviceContext::StartGraphicSSNotation(Object *object, std::string gClass
             }
         }
         else if (accid) {
-            //data_ACCIDENTAL_EXPLICIT accExp = accid->GetAccid();
+            // data_ACCIDENTAL_EXPLICIT accExp = accid->GetAccid();
             data_ACCIDENTAL_WRITTEN accExp = accid->GetAccid();
             switch (accExp) {
                 case ACCIDENTAL_WRITTEN_s: alter = 1; break;
@@ -372,7 +372,7 @@ void SvgDeviceContext::StartGraphicSSNotation(Object *object, std::string gClass
 
         // Adjustment for transposition intruments
         // SS is this needed ?
-        //midiBase += params->m_transSemi;
+        // midiBase += params->m_transSemi;
 
         bool hasOloc = note->HasOloc();
         bool hasPloc = note->HasPloc();
@@ -418,21 +418,21 @@ void SvgDeviceContext::StartGraphicSSNotation(Object *object, std::string gClass
         //if (layer_obj != NULL) {
         //    Layer *layer = dynamic_cast<Layer *>(layer_obj);
         //}
-        
-        //int timeOn = (int) (timeofElementOn / 64) * 4;
-        //int timeOff = (int) (timeofElementOff / 64) * 4;
-        
+
+        // int timeOn = (int) (timeofElementOn / 64) * 4;
+        // int timeOff = (int) (timeofElementOff / 64) * 4;
+    
         // Really really low resolution timing
 
         int period = 62.5;//125; //2000 / 16;
 
-        //int timeOn = (int) (timeofElementOn / 64);
+        // int timeOn = (int) (timeofElementOn / 64);
         int timeOn = (int) (timeofElementOn / period);
         int timeOff = (int) (timeofElementOff / period);
 
         // NOT USED AS NOT IN SYNC WITH OLD MIDI FILE
-        //int eventOn = (int) note->m_eventOn;
-        //int eventOff = (int) note->m_eventOff;
+        // int eventOn = (int) note->m_eventOn;
+        // int eventOff = (int) note->m_eventOff;
 
         Att att = Att();
 
@@ -470,8 +470,8 @@ void SvgDeviceContext::StartGraphicSSNotation(Object *object, std::string gClass
 
         m_currentNode.append_attribute("pitch") = pitch;
 
-        //m_currentNode.append_attribute("time_on") = (eventOn == -1) ? -1 : timeofElementOn;
-        //m_currentNode.append_attribute("time_off") = (eventOff == -1) ? -1 : timeofElementOff;
+        // m_currentNode.append_attribute("time_on") = (eventOn == -1) ? -1 : timeofElementOn;
+        // m_currentNode.append_attribute("time_off") = (eventOff == -1) ? -1 : timeofElementOff;
 
         m_currentNode.append_attribute("qstamp_on") = measureScoreStart + note->GetScoreTimeOnset();
         m_currentNode.append_attribute("qstamp_off") = measureScoreStart + note->GetScoreTimeOffset();
@@ -488,9 +488,9 @@ void SvgDeviceContext::StartGraphicSSNotation(Object *object, std::string gClass
             m_currentNode.append_attribute("event_off") = eventOff;
         }
 
-        //m_currentNode.append_attribute("fill") = vrv::RGBToHexStr(timeOn*4,pitch,timeOff*4).c_str();
+        // m_currentNode.append_attribute("fill") = vrv::RGBToHexStr(timeOn*4,pitch,timeOff*4).c_str();
 
-        //m_currentNode.append_attribute("fill") = "red";
+        // m_currentNode.append_attribute("fill") = "red";
     }
 
 }

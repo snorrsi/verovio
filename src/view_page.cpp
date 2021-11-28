@@ -744,7 +744,7 @@ void View::DrawBarLines(DeviceContext *dc, Measure *measure, StaffGrp *staffGrp,
                     yBottom -= m_doc->GetDrawingDoubleUnit(staff->m_drawingStaffSize);
                 }
 #ifdef SS_STAFFLINE_1_AS_5
-                //SS . Hard fix 1 staff line for now 5 lines to get barline
+                // SS . Hard fix 1 staff line for now 5 lines to get barline
                 int lineCount = childStaffDef->GetLines();
                 if (lineCount == 1) {
                     yTop = staff->GetDrawingY()
