@@ -448,7 +448,6 @@ void AppendLogBuffer(bool checkDuplicate, std::string message, consoleLogLevel l
 #endif
 }
 
-
 bool Check(Object *object)
 {
     assert(object);

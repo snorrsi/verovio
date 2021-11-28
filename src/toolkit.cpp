@@ -31,9 +31,9 @@
 #include "nc.h"
 #include "neume.h"
 #include "note.h"
-#include "rest.h"
 #include "options.h"
 #include "page.h"
+#include "rest.h"
 #include "runtimeclock.h"
 #include "slur.h"
 #include "staff.h"
@@ -1869,4 +1869,4 @@ void Toolkit::LogRuntime() const
 
 } // namespace vrv
 
-}
+} // namespace vrv
