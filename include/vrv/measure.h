@@ -250,7 +250,6 @@ public:
      */
     std::vector<std::pair<LayerElement *, LayerElement *>> GetInternalTieEndpoints();
 
-    //SS
     /**
      * Return the score offset for the repeat (1-based).
      */

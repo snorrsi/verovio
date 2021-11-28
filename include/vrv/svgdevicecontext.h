@@ -116,7 +116,8 @@ public:
     void EndGraphic(Object *object, View *view) override;
     
     // SS
-    virtual void StartGraphicSSNotation(Object *object, std::string gClass, std::string gId, bool primary = true, bool prepend = false);
+    virtual void StartGraphicSSNotation(
+        Object *object, std::string gClass, std::string gId, bool primary = true, bool prepend = false);
 
     ///@}
 

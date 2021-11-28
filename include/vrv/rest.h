@@ -80,34 +80,25 @@ public:
      * This is valid only for CMN and for duration shorter than half notes.
      */
     wchar_t GetRestGlyph() const;
-
-    /**
-     * Get the vertical offset for each glyph.
-     */
-    int GetRestLocOffset(int loc);
-
-// SS BEGIN
                  
-     /**
-      * MIDI timing information
-      */
-     ///@{
-     void SetScoreTimeOnset(double scoreTime);
-     void SetRealTimeOnsetSeconds(double timeInSeconds);
-     void SetScoreTimeOffset(double scoreTime);
-     void SetRealTimeOffsetSeconds(double timeInSeconds);
-     void SetScoreTimeTiedDuration(double timeInSeconds);
-     //void CalcMIDIPitch(int shift);
-     double GetScoreTimeOnset() const;
-     double GetRealTimeOnsetMilliseconds() const;
-     double GetScoreTimeOffset() const;
-     double GetScoreTimeTiedDuration() const;
-     double GetRealTimeOffsetMilliseconds() const;
-     double GetScoreTimeDuration() const;
-     //char GetMIDIPitch() const;
-     ///@}
-
-// SS END
+    /**
+     * MIDI timing information
+     */
+    ///@{
+    void SetScoreTimeOnset(double scoreTime);
+    void SetRealTimeOnsetSeconds(double timeInSeconds);
+    void SetScoreTimeOffset(double scoreTime);
+    void SetRealTimeOffsetSeconds(double timeInSeconds);
+    void SetScoreTimeTiedDuration(double timeInSeconds);
+    //void CalcMIDIPitch(int shift);
+    double GetScoreTimeOnset() const;
+    double GetRealTimeOnsetMilliseconds() const;
+    double GetScoreTimeOffset() const;
+    double GetScoreTimeTiedDuration() const;
+    double GetRealTimeOffsetMilliseconds() const;
+    double GetScoreTimeDuration() const;
+    //char GetMIDIPitch() const;
+    ///@}
                  
     //----------//
     // Functors //
