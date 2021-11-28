@@ -69,7 +69,7 @@ void SetDefaultResourcePath(const std::string &path)
 
 // SS Made extern
 extern "C" {
-    
+
 char *Toolkit::m_humdrumBuffer = NULL;
 
 Toolkit::Toolkit(bool initFont)
@@ -1389,8 +1389,8 @@ std::string Toolkit::RenderToTimemap()
 
 // SS
 // Create time map, use force if should create even if exists.
-void Toolkit::CreateTimemap(bool force) {
-
+void Toolkit::CreateTimemap(bool force)
+{
     if (!m_doc.HasMidiTimemap() || (force == true)) {
         // generate MIDI timemap before progressing
         m_doc.CalculateMidiTimemap();
@@ -1398,7 +1398,6 @@ void Toolkit::CreateTimemap(bool force) {
     if (!m_doc.HasMidiTimemap()) {
         LogWarning("Calculation of MIDI timemap failed, time value is invalid.");
     }
-    
 }
     
 std::string Toolkit::GetElementsAtTime(int millisec)
@@ -1555,7 +1554,8 @@ int Toolkit::GetTimeForElement(const std::string &xmlId)
         // For now ignore repeats and access always the first
         timeofElement = measure->GetRealTimeOffsetMilliseconds(1);
         timeofElement += note->GetRealTimeOnsetMilliseconds();
-    } else if (element->Is(REST)) {
+    }
+    else if (element->Is(REST)) {
         if (!m_doc.HasMidiTimemap()) {
             // generate MIDI timemap before progressing
             m_doc.CalculateMidiTimemap();
@@ -1869,4 +1869,4 @@ void Toolkit::LogRuntime() const
 
 } // namespace vrv
 
-} // SS EXTERN ENDS
+}

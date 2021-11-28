@@ -22,12 +22,10 @@
 #include "staffdef.h"
 #include "view.h"
 #include "vrv.h"
-// SS BEGIN
 #include "measure.h"
 #include "note.h"
 #include "rest.h"
 #include "atttypes.h"
-// SS END
 
 //----------------------------------------------------------------------------
 
@@ -173,10 +171,10 @@ void SvgDeviceContext::Commit(bool xml_declaration)
 }
 
 // SS
-void SvgDeviceContext::StartGraphicSSNotation(Object *object, std::string gClass, std::string gId, bool primary, bool prepend) {
-    
+void SvgDeviceContext::StartGraphicSSNotation(Object *object, std::string gClass, std::string gId, bool primary, bool prepend)
+{
     int measureIdx = -1;
-    
+
     // SS
     double measureScoreStart = 0;
     int measureTimeStart = 0;
@@ -185,20 +183,20 @@ void SvgDeviceContext::StartGraphicSSNotation(Object *object, std::string gClass
         Measure *myMeasure = dynamic_cast<Measure *>(object);
         assert(measure);
         assert(myMeasure);
-        //measureIdx = object->GetIdx(); //(int) measure->GetN();
+        // measureIdx = object->GetIdx(); //(int) measure->GetN();
         measureIdx = measure->GetIdx();
         m_currentNode.append_attribute("measureNr") = measureIdx;
         Object * object2 = measure->GetFirstAncestorInRange(LAYER_ELEMENT, LAYER_ELEMENT_max);
         if (object2 != NULL) {
-            //LayerElement *le = dynamic_cast<LayerElement*>(object2);
-            //m_currentNode.append_attribute("dur") = le->GetAlignmentDuration();
+            // LayerElement *le = dynamic_cast<LayerElement*>(object2);
+            // m_currentNode.append_attribute("dur") = le->GetAlignmentDuration();
         }
-        
+
         measureScoreStart = measure->GetScoreTimeOffset(1);
         measureTimeStart = measure->GetRealTimeOffsetMilliseconds(1);
-        
+
         m_currentNode.append_attribute("qstamp_start") = measureScoreStart;
-        
+
         /*
         double timeofElementOn = myMeasure->GetRealTimeOnsetMilliseconds();
         double timeofElementOff = myMeasure->GetRealTimeOffsetMilliseconds();
@@ -208,9 +206,9 @@ void SvgDeviceContext::StartGraphicSSNotation(Object *object, std::string gClass
         m_currentNode.append_attribute("time_off") = timeofElementOff;
         */
     }
-    
+
     int staffIdx = -1;
-    
+
     if (object->Is(STAFF)) {
         Staff *staff = dynamic_cast<Staff *>(object);
         assert(staff);
@@ -219,7 +217,7 @@ void SvgDeviceContext::StartGraphicSSNotation(Object *object, std::string gClass
     }
 
     if (object->Is(NOTE) || object->Is(REST)) {
-        
+
         Object * measureObj = object->GetFirstAncestor(MEASURE);
         if (measureObj != NULL) {
             Measure *measure = dynamic_cast<Measure *>(measureObj);
@@ -228,7 +226,7 @@ void SvgDeviceContext::StartGraphicSSNotation(Object *object, std::string gClass
         }
 
     }
-    
+
     // SS
     // should 1000 / 120 / 2 be there?
     if (object->Is(REST)) {
@@ -238,9 +236,9 @@ void SvgDeviceContext::StartGraphicSSNotation(Object *object, std::string gClass
         //double timeofElementOff = rest->m_playingOffset *1000.0 / 120.0 / 2.0;
         double timeofElementOn = rest->GetRealTimeOnsetMilliseconds();
         double timeofElementOff = rest->GetRealTimeOffsetMilliseconds();
-        
+
         double timeofElementDuration = timeofElementOff - timeofElementOn;
-        
+
         m_currentNode.append_attribute("qstamp_on") = measureScoreStart + rest->GetScoreTimeOnset();
         m_currentNode.append_attribute("qstamp_off") = measureScoreStart + rest->GetScoreTimeOffset();
         m_currentNode.append_attribute("qstamp_dur") = rest->GetScoreTimeDuration();
@@ -248,9 +246,9 @@ void SvgDeviceContext::StartGraphicSSNotation(Object *object, std::string gClass
         m_currentNode.append_attribute("time_on") = timeofElementOn;
         m_currentNode.append_attribute("time_off") = timeofElementOff;
         m_currentNode.append_attribute("time_len") = timeofElementDuration;
-        
+
     }
-    
+
     if (object->Is(NOTE)) {
         Note *note = dynamic_cast<Note *>(object);
         assert(note);
@@ -258,10 +256,10 @@ void SvgDeviceContext::StartGraphicSSNotation(Object *object, std::string gClass
         //double timeofElementOff = note->m_playingOffset *1000.0 / 120.0 / 2.0;
         double timeofElementOn = note->GetRealTimeOnsetMilliseconds();
         double timeofElementOff = note->GetRealTimeOffsetMilliseconds();
-        
+
         double timeofElementDuration = timeofElementOff - timeofElementOn;
         int measureNoteIdx = -1;
-        
+
         /*
          Object *m_obj = object->GetFirstAncestor(MEASURE);
          if (m_obj != NULL) {
@@ -285,19 +283,19 @@ void SvgDeviceContext::StartGraphicSSNotation(Object *object, std::string gClass
          m_currentNode.append_attribute("m_on") = measureOn;
          m_currentNode.append_attribute("m_off") = measureOff;
          }
-         */
-        
+        */
+
         int alter = 0;
         std::string pNameStr = "";
         std::string step = "";
-        
+
         Accid *accid = note->GetDrawingAccid();
-        
+
         // Create midi note
-        
+
         //SS this is basicly same code as in note->GetMidiPitch
         //SS should really use that. And only use this for unpitched notes.
-        
+
         int midiBase = 0;
         data_PITCHNAME pname = note->GetPname();
         data_PITCHNAME ploc = note->GetPloc();
@@ -344,45 +342,45 @@ void SvgDeviceContext::StartGraphicSSNotation(Object *object, std::string gClass
                 default: break;
             }
         }
-        
+
         // Adjustment for transposition intruments
         // SS is this needed ?
         //midiBase += params->m_transSemi;
-        
+
         bool hasOloc = note->HasOloc();
         bool hasPloc = note->HasPloc();
-        
+
         bool isUnPitched = (hasOloc && hasPloc);
-        
+
         int oct = note->GetOct();
         int oloc = note->GetOloc();
         int _oct = oct;
         if (hasOloc) {
             _oct = oloc;
         }
-        
+
         if (note->HasOctGes()) _oct = note->GetOctGes();
-        
+
         int pitch = midiBase + (_oct + 1) * 12;
-        
+
         int inBeam = false;
         Beam *beam = note->IsInBeam();
         if (beam != NULL) {
             inBeam = true;
         }
-        
+
         if (inBeam) {
             m_currentNode.append_attribute("in_beam") = 1;
         } else {
             m_currentNode.append_attribute("in_beam") = 0;
         }
-        
+
         bool inChord = false;
         Chord *chord = note->IsChordTone();
         if (chord != NULL) {
             inChord = true;
         }
-        
+
         if (inChord) {
             m_currentNode.append_attribute("in_chord") = 1;
             m_currentNode.append_attribute("chord_pos") = chord->PositionInChord(note);
@@ -398,77 +396,76 @@ void SvgDeviceContext::StartGraphicSSNotation(Object *object, std::string gClass
         //int timeOff = (int) (timeofElementOff / 64) * 4;
         
         // Really really low resolution timing
-        
+
         int period = 62.5;//125; //2000 / 16;
-        
+
         //int timeOn = (int) (timeofElementOn / 64);
         int timeOn = (int) (timeofElementOn / period);
         int timeOff = (int) (timeofElementOff / period);
-        
+
         // NOT USED AS NOT IN SYNC WITH OLD MIDI FILE
         //int eventOn = (int) note->m_eventOn;
         //int eventOff = (int) note->m_eventOff;
 
-        
         Att att = Att();
-        
+
         bool isTied = note->HasTie();
-        
+
         if (isUnPitched) {
             m_currentNode.append_attribute("unpitched") = 1;
         } else {
             m_currentNode.append_attribute("unpitched") = 0;
         }
-        
+
         if (isTied) {
             m_currentNode.append_attribute("in_tie") = 1;
         } else {
             m_currentNode.append_attribute("in_tie") = 0;
         }
-        
+
         if (hasOloc) {
             m_currentNode.append_attribute("oloc") = note->GetOloc();
         }
-        
+
         if (hasPloc) {
             m_currentNode.append_attribute("ploc") = att.PitchnameToStr(ploc).c_str();
         }
-        
+
         if (isTied) {
             data_TIE tie = note->GetTie();
             m_currentNode.append_attribute("tie") = att.TieToStr(tie).c_str();
         }
-        
+
         m_currentNode.append_attribute("pname") = step.c_str(); // pNameStr.c_str();
         m_currentNode.append_attribute("step") = step.c_str();
         m_currentNode.append_attribute("alter") = alter;
         m_currentNode.append_attribute("oct") = oct;
-        
+
         m_currentNode.append_attribute("pitch") = pitch;
-        
+
         //m_currentNode.append_attribute("time_on") = (eventOn == -1) ? -1 : timeofElementOn;
         //m_currentNode.append_attribute("time_off") = (eventOff == -1) ? -1 : timeofElementOff;
-        
+
         m_currentNode.append_attribute("qstamp_on") = measureScoreStart + note->GetScoreTimeOnset();
         m_currentNode.append_attribute("qstamp_off") = measureScoreStart + note->GetScoreTimeOffset();
         m_currentNode.append_attribute("qstamp_dur") = note->GetScoreTimeDuration();
-        
+
         m_currentNode.append_attribute("time_on") = timeofElementOn;
         m_currentNode.append_attribute("time_off") = timeofElementOff;
         m_currentNode.append_attribute("time_len") = timeofElementDuration;
-        
+
         if (note->GetScoreTimeTiedDuration() < 0) {
             int eventOn = -1;
             int eventOff = -1;
             m_currentNode.append_attribute("event_on") = eventOn;
             m_currentNode.append_attribute("event_off") = eventOff;
         }
-        
+
         //m_currentNode.append_attribute("fill") = vrv::RGBToHexStr(timeOn*4,pitch,timeOff*4).c_str();
-        
+
         //m_currentNode.append_attribute("fill") = "red";
     }
-    
+
 }
     
 void SvgDeviceContext::StartGraphic(Object *object, std::string gClass, std::string gId, bool primary, bool prepend)
