@@ -773,7 +773,7 @@ void Rest::SetScoreTimeTiedDuration(double scoreTime)
 
 void Rest::CalcMIDIPitch(int shift)
 {
-
+    return;
 }
 
 double Rest::GetScoreTimeOnset() const

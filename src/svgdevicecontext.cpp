@@ -415,9 +415,9 @@ void SvgDeviceContext::StartGraphicSSNotation(Object *object, std::string gClass
             m_currentNode.append_attribute("in_chord") = 0;
         }
         Object *layer_obj = object->GetFirstAncestor(LAYER);
-        //if (layer_obj != NULL) {
-        //    Layer *layer = dynamic_cast<Layer *>(layer_obj);
-        //}
+        // if (layer_obj != NULL) {
+        //     Layer *layer = dynamic_cast<Layer *>(layer_obj);
+        // }
 
         // int timeOn = (int) (timeofElementOn / 64) * 4;
         // int timeOff = (int) (timeofElementOff / 64) * 4;
@@ -440,13 +440,15 @@ void SvgDeviceContext::StartGraphicSSNotation(Object *object, std::string gClass
 
         if (isUnPitched) {
             m_currentNode.append_attribute("unpitched") = 1;
-        } else {
+        }
+        else {
             m_currentNode.append_attribute("unpitched") = 0;
         }
 
         if (isTied) {
             m_currentNode.append_attribute("in_tie") = 1;
-        } else {
+        }
+        else {
             m_currentNode.append_attribute("in_tie") = 0;
         }
 
@@ -492,9 +494,8 @@ void SvgDeviceContext::StartGraphicSSNotation(Object *object, std::string gClass
 
         // m_currentNode.append_attribute("fill") = "red";
     }
-
 }
-    
+
 void SvgDeviceContext::StartGraphic(Object *object, std::string gClass, std::string gId, bool primary, bool prepend)
 {
     if (object->HasAttClass(ATT_TYPED)) {
@@ -517,7 +518,7 @@ void SvgDeviceContext::StartGraphic(Object *object, std::string gClass, std::str
 
     // SS
     StartGraphicSSNotation(object, gClass, gId, primary, prepend);
-    
+
     // this sets staffDef styles for lyrics
     if (object->Is(STAFF)) {
         Staff *staff = vrv_cast<Staff *>(object);
