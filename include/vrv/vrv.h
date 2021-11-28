@@ -57,8 +57,8 @@ bool AreEqual(double dFirstVal, double dSecondVal);
 std::string ExtractUuidFragment(std::string refUuid);
 
 /**
-* Utility for creating RGB hex from RGB values
-*/
+ * Utility for creating RGB hex from RGB values
+ */
 std::string RGBToHexStr(int red, int green, int blue);
 
 /**

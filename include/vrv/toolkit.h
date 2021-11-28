@@ -697,7 +697,6 @@ public:
     ///@}
 
 protected:
-//#ifdef USE_EMSCRIPTEN_OR_LIB
     /**
      * Identify the input file type for auto loading of input data
      */
