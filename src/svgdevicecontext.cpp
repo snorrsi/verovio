@@ -13,19 +13,19 @@
 
 //----------------------------------------------------------------------------
 
+#include "atttypes.h"
 #include "doc.h"
 #include "floatingobject.h"
 #include "glyph.h"
 #include "layer.h"
 #include "layerelement.h"
+#include "measure.h"
+#include "note.h"
+#include "rest.h"
 #include "staff.h"
 #include "staffdef.h"
 #include "view.h"
 #include "vrv.h"
-#include "measure.h"
-#include "note.h"
-#include "rest.h"
-#include "atttypes.h"
 
 //----------------------------------------------------------------------------
 
@@ -171,7 +171,8 @@ void SvgDeviceContext::Commit(bool xml_declaration)
 }
 
 // SS
-void SvgDeviceContext::StartGraphicSSNotation(Object *object, std::string gClass, std::string gId, bool primary, bool prepend)
+void SvgDeviceContext::StartGraphicSSNotation(
+    Object *object, std::string gClass, std::string gId, bool primary, bool prepend)
 {
     int measureIdx = -1;
 
@@ -186,7 +187,7 @@ void SvgDeviceContext::StartGraphicSSNotation(Object *object, std::string gClass
         // measureIdx = object->GetIdx(); //(int) measure->GetN();
         measureIdx = measure->GetIdx();
         m_currentNode.append_attribute("measureNr") = measureIdx;
-        Object * object2 = measure->GetFirstAncestorInRange(LAYER_ELEMENT, LAYER_ELEMENT_max);
+        Object *object2 = measure->GetFirstAncestorInRange(LAYER_ELEMENT, LAYER_ELEMENT_max);
         if (object2 != NULL) {
             // LayerElement *le = dynamic_cast<LayerElement*>(object2);
             // m_currentNode.append_attribute("dur") = le->GetAlignmentDuration();
@@ -200,7 +201,7 @@ void SvgDeviceContext::StartGraphicSSNotation(Object *object, std::string gClass
         /*
         double timeofElementOn = myMeasure->GetRealTimeOnsetMilliseconds();
         double timeofElementOff = myMeasure->GetRealTimeOffsetMilliseconds();
-        
+
         double timeofElementDuration = timeofElementOff - timeofElementOn;
         m_currentNode.append_attribute("time_on") = timeofElementOn;
         m_currentNode.append_attribute("time_off") = timeofElementOff;
@@ -217,7 +218,7 @@ void SvgDeviceContext::StartGraphicSSNotation(Object *object, std::string gClass
     }
 
     if (object->Is(NOTE) || object->Is(REST)) {
-        Object * measureObj = object->GetFirstAncestor(MEASURE);
+        Object *measureObj = object->GetFirstAncestor(MEASURE);
         if (measureObj != NULL) {
             Measure *measure = dynamic_cast<Measure *>(measureObj);
             measureScoreStart = measure->GetScoreTimeOffset(1);
@@ -264,10 +265,10 @@ void SvgDeviceContext::StartGraphicSSNotation(Object *object, std::string gClass
          measureNoteIdx = measure->GetChildIndex(note);
          Object *current_note_obj = measure->GetFirst(NOTE);
          Note *first_note = dynamic_cast<Note *>(current_note_obj);
-         
+
          float measureOnRaw = first_note->m_playingOnset;
          float measureOffRaw = first_note->m_playingOffset;
-         
+
          while (current_note_obj) {
          current_note_obj->GetNext();
          Note *current_note = dynamic_cast<Note *>(current_note_obj);
@@ -398,7 +399,8 @@ void SvgDeviceContext::StartGraphicSSNotation(Object *object, std::string gClass
 
         if (inBeam) {
             m_currentNode.append_attribute("in_beam") = 1;
-        } else {
+        }
+        else {
             m_currentNode.append_attribute("in_beam") = 0;
         }
 
@@ -411,7 +413,8 @@ void SvgDeviceContext::StartGraphicSSNotation(Object *object, std::string gClass
         if (inChord) {
             m_currentNode.append_attribute("in_chord") = 1;
             m_currentNode.append_attribute("chord_pos") = chord->PositionInChord(note);
-        } else {
+        }
+        else {
             m_currentNode.append_attribute("in_chord") = 0;
         }
         Object *layer_obj = object->GetFirstAncestor(LAYER);
@@ -421,14 +424,14 @@ void SvgDeviceContext::StartGraphicSSNotation(Object *object, std::string gClass
 
         // int timeOn = (int) (timeofElementOn / 64) * 4;
         // int timeOff = (int) (timeofElementOff / 64) * 4;
-    
+
         // Really really low resolution timing
 
-        int period = 62.5;//125; //2000 / 16;
+        int period = 62.5; // 125; //2000 / 16;
 
         // int timeOn = (int) (timeofElementOn / 64);
-        int timeOn = (int) (timeofElementOn / period);
-        int timeOff = (int) (timeofElementOff / period);
+        int timeOn = (int)(timeofElementOn / period);
+        int timeOff = (int)(timeofElementOff / period);
 
         // NOT USED AS NOT IN SYNC WITH OLD MIDI FILE
         // int eventOn = (int) note->m_eventOn;
