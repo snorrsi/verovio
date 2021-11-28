@@ -148,7 +148,7 @@ public:
      * // SS See Object::GenerateTimemap
      */
     int GenerateTimemap(FunctorParams *functorParams) override;
-                 
+
 private:
     /**
      * Helper function to update rest oloc/ploc based on the input TransPitch
@@ -220,7 +220,6 @@ private:
      * indicate that it should not be written to MIDI output.
      */
     double m_scoreTimeTiedDuration;
-
 };
 
 } // namespace vrv
