@@ -188,7 +188,7 @@ void SvgDeviceContext::StartGraphicSSNotation(Object *object, std::string gClass
         //measureIdx = object->GetIdx(); //(int) measure->GetN();
         measureIdx = measure->GetIdx();
         m_currentNode.append_attribute("measureNr") = measureIdx;
-        Object * object2 = measure->GetFirstParentInRange(LAYER_ELEMENT, LAYER_ELEMENT_max);
+        Object * object2 = measure->GetFirstAncestorInRange(LAYER_ELEMENT, LAYER_ELEMENT_max);
         if (object2 != NULL) {
             //LayerElement *le = dynamic_cast<LayerElement*>(object2);
             //m_currentNode.append_attribute("dur") = le->GetAlignmentDuration();
@@ -220,7 +220,7 @@ void SvgDeviceContext::StartGraphicSSNotation(Object *object, std::string gClass
 
     if (object->Is(NOTE) || object->Is(REST)) {
         
-        Object * measureObj = object->GetFirstParent(MEASURE);
+        Object * measureObj = object->GetFirstAncestor(MEASURE);
         if (measureObj != NULL) {
             Measure *measure = dynamic_cast<Measure *>(measureObj);
             measureScoreStart = measure->GetScoreTimeOffset(1);
@@ -263,7 +263,7 @@ void SvgDeviceContext::StartGraphicSSNotation(Object *object, std::string gClass
         int measureNoteIdx = -1;
         
         /*
-         Object *m_obj = object->GetFirstParent(MEASURE);
+         Object *m_obj = object->GetFirstAncestor(MEASURE);
          if (m_obj != NULL) {
          Measure *measure = dynamic_cast<Measure *>(m_obj);
          measureNoteIdx = measure->GetChildIndex(note);
@@ -389,7 +389,7 @@ void SvgDeviceContext::StartGraphicSSNotation(Object *object, std::string gClass
         } else {
             m_currentNode.append_attribute("in_chord") = 0;
         }
-        Object *layer_obj = object->GetFirstParent(LAYER);
+        Object *layer_obj = object->GetFirstAncestor(LAYER);
         //if (layer_obj != NULL) {
         //    Layer *layer = dynamic_cast<Layer *>(layer_obj);
         //}
@@ -492,7 +492,7 @@ void SvgDeviceContext::StartGraphic(Object *object, std::string gClass, std::str
     AppendAdditionalAttributes(object);
 
     // SS
-    StartGraphicSSNotation(object, gClass, gId);
+    StartGraphicSSNotation(object, gClass, gId, primary, prepend);
     
     // this sets staffDef styles for lyrics
     if (object->Is(STAFF)) {

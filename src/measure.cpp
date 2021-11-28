@@ -454,7 +454,6 @@ double Measure::GetScoreTimeOffset(int repeat) const
     return m_scoreTimeOffset.at(repeat - 1);
 }
 
-void Measure::SetDrawingBarLines(Measure *previous, bool systemBreak, bool scoreDefInsert)
 data_BARRENDITION Measure::GetDrawingLeftBarLineByStaffN(int staffN) const
 {
     auto elementIter = m_invisibleStaffBarlines.find(staffN);

@@ -1565,7 +1565,7 @@ int Toolkit::GetTimeForElement(const std::string &xmlId)
         }
         Rest *rest = dynamic_cast<Rest *>(element);
         assert(rest);
-        Measure *measure = dynamic_cast<Measure *>(rest->GetFirstParent(MEASURE));
+        Measure *measure = dynamic_cast<Measure *>(rest->GetFirstAncestor(MEASURE));
         assert(measure);
         // For now ignore repeats and access always the first
         timeofElement = measure->GetRealTimeOffsetMilliseconds(1);

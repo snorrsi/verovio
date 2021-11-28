@@ -98,12 +98,12 @@ public:
      void SetRealTimeOffsetSeconds(double timeInSeconds);
      void SetScoreTimeTiedDuration(double timeInSeconds);
      //void CalcMIDIPitch(int shift);
-     double GetScoreTimeOnset(); const;
-     int GetRealTimeOnsetMilliseconds(); const;
-     double GetScoreTimeOffset(); const;
-     double GetScoreTimeTiedDuration(); const;
-     int GetRealTimeOffsetMilliseconds(); const;
-     double GetScoreTimeDuration(); const;
+     double GetScoreTimeOnset() const;
+     double GetRealTimeOnsetMilliseconds() const;
+     double GetScoreTimeOffset() const;
+     double GetScoreTimeTiedDuration() const;
+     double GetRealTimeOffsetMilliseconds() const;
+     double GetScoreTimeDuration() const;
      //char GetMIDIPitch() const;
      ///@}
 
@@ -157,7 +157,7 @@ public:
     /**
     * See Object::GenerateTimemap
     */
-    virtual int GenerateTimemap(FunctorParams *functorParams);
+    int GenerateTimemap(FunctorParams *functorParams) override;
                  
 
                  

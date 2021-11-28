@@ -396,6 +396,9 @@ public:
 
     //@}
 
+    // SS
+    void CreateTimemap(bool force);
+
     /**
      **************************************************************************
      * @name Humdrum related methods
@@ -743,4 +746,4 @@ private:
 };
 
 } // namespace vrv
-//#endif //USE_EMSCRIPTEN_OR_LIB
+#endif //__VRV_TOOLKIT_H__
