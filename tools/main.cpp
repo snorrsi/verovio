@@ -426,7 +426,7 @@ int main(int argc, char **argv)
         exit(1);
     }
 
-    if ((outformat != "svg") && (outformat != "mei") && (outformat != "midi") && (outformat != "timemap") && (outformat != "svgmidi")
+    if ((outformat != "svg") && (outformat != "mei") && (outformat != "midi") && (outformat != "timemap")
         && (outformat != "humdrum") && (outformat != "hum") && (outformat != "pae") && (outformat != "pb-mei")) {
         std::cerr << "Output format (" << outformat
                   << ") can only be 'mei', 'pb-mei', 'svg', 'midi', 'humdrum' or 'pae'." << std::endl;
@@ -536,7 +536,7 @@ int main(int argc, char **argv)
             else {
                 std::cerr << "Output written to " << _outfile << "." << std::endl;
             }
-            
+
             std::cerr << "Output written to " << outfile << "." << std::endl;
             int p;
             for (p = from; p < to; p++) {
