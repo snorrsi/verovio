@@ -217,14 +217,12 @@ void SvgDeviceContext::StartGraphicSSNotation(Object *object, std::string gClass
     }
 
     if (object->Is(NOTE) || object->Is(REST)) {
-
         Object * measureObj = object->GetFirstAncestor(MEASURE);
         if (measureObj != NULL) {
             Measure *measure = dynamic_cast<Measure *>(measureObj);
             measureScoreStart = measure->GetScoreTimeOffset(1);
             measureTimeStart = measure->GetRealTimeOffsetMilliseconds(1);
         }
-
     }
 
     // SS
@@ -232,8 +230,8 @@ void SvgDeviceContext::StartGraphicSSNotation(Object *object, std::string gClass
     if (object->Is(REST)) {
         Rest *rest = dynamic_cast<Rest *>(object);
         assert(rest);
-        //double timeofElementOn = rest->m_playingOnset *1000.0 / 120.0 / 2.0;
-        //double timeofElementOff = rest->m_playingOffset *1000.0 / 120.0 / 2.0;
+        // double timeofElementOn = rest->m_playingOnset *1000.0 / 120.0 / 2.0;
+        // double timeofElementOff = rest->m_playingOffset *1000.0 / 120.0 / 2.0;
         double timeofElementOn = rest->GetRealTimeOnsetMilliseconds();
         double timeofElementOff = rest->GetRealTimeOffsetMilliseconds();
 
@@ -246,14 +244,13 @@ void SvgDeviceContext::StartGraphicSSNotation(Object *object, std::string gClass
         m_currentNode.append_attribute("time_on") = timeofElementOn;
         m_currentNode.append_attribute("time_off") = timeofElementOff;
         m_currentNode.append_attribute("time_len") = timeofElementDuration;
-
     }
 
     if (object->Is(NOTE)) {
         Note *note = dynamic_cast<Note *>(object);
         assert(note);
-        //double timeofElementOn = note->m_playingOnset *1000.0 / 120.0 / 2.0;
-        //double timeofElementOff = note->m_playingOffset *1000.0 / 120.0 / 2.0;
+        // double timeofElementOn = note->m_playingOnset *1000.0 / 120.0 / 2.0;
+        // double timeofElementOff = note->m_playingOffset *1000.0 / 120.0 / 2.0;
         double timeofElementOn = note->GetRealTimeOnsetMilliseconds();
         double timeofElementOff = note->GetRealTimeOffsetMilliseconds();
 
@@ -304,13 +301,23 @@ void SvgDeviceContext::StartGraphicSSNotation(Object *object, std::string gClass
             _pname = ploc;
         }
         switch (_pname) {
-            case PITCHNAME_c: step = "C"; midiBase = 0; break;
-            case PITCHNAME_d: step = "D"; midiBase = 2; break;
-            case PITCHNAME_e: step = "E"; midiBase = 4; break;
-            case PITCHNAME_f: step = "F"; midiBase = 5; break;
-            case PITCHNAME_g: step = "G"; midiBase = 7; break;
-            case PITCHNAME_a: step = "A"; midiBase = 9; break;
-            case PITCHNAME_b: step = "B"; midiBase = 11; break;
+            case PITCHNAME_c: midiBase = 0; break;
+            case PITCHNAME_d: midiBase = 2; break;
+            case PITCHNAME_e: midiBase = 4; break;
+            case PITCHNAME_f: midiBase = 5; break;
+            case PITCHNAME_g: midiBase = 7; break;
+            case PITCHNAME_a: midiBase = 9; break;
+            case PITCHNAME_b: midiBase = 11; break;
+            case PITCHNAME_NONE: break;
+        }
+        switch (_pname) {
+            case PITCHNAME_c: step = "C"; break;
+            case PITCHNAME_d: step = "D"; break;
+            case PITCHNAME_e: step = "E"; break;
+            case PITCHNAME_f: step = "F"; break;
+            case PITCHNAME_g: step = "G"; break;
+            case PITCHNAME_a: step = "A"; break;
+            case PITCHNAME_b: step = "B"; break;
             case PITCHNAME_NONE: break;
         }
         // Check for accidentals
@@ -318,10 +325,17 @@ void SvgDeviceContext::StartGraphicSSNotation(Object *object, std::string gClass
             //data_ACCIDENTAL_IMPLICIT accImp = accid->GetAccidGes();
             data_ACCIDENTAL_GESTURAL accImp = accid->GetAccidGes();
             switch (accImp) {
-                case ACCIDENTAL_GESTURAL_s: alter = 1; midiBase += 1; break;
-                case ACCIDENTAL_GESTURAL_f: alter = -1; midiBase -= 1; break;
-                case ACCIDENTAL_GESTURAL_ss: alter = 2; midiBase += 2; break;
-                case ACCIDENTAL_GESTURAL_ff: alter = -2; midiBase -= 2; break;
+                case ACCIDENTAL_GESTURAL_s: alter = 1; break;
+                case ACCIDENTAL_GESTURAL_f: alter = -1; break;
+                case ACCIDENTAL_GESTURAL_ss: alter = 2; break;
+                case ACCIDENTAL_GESTURAL_ff: alter = -2; break;
+                default: break;
+            }
+            switch (accImp) {
+                case ACCIDENTAL_GESTURAL_s: midiBase += 1; break;
+                case ACCIDENTAL_GESTURAL_f: midiBase -= 1; break;
+                case ACCIDENTAL_GESTURAL_ss: midiBase += 2; break;
+                case ACCIDENTAL_GESTURAL_ff: midiBase -= 2; break;
                 default: break;
             }
         }
@@ -329,16 +343,29 @@ void SvgDeviceContext::StartGraphicSSNotation(Object *object, std::string gClass
             //data_ACCIDENTAL_EXPLICIT accExp = accid->GetAccid();
             data_ACCIDENTAL_WRITTEN accExp = accid->GetAccid();
             switch (accExp) {
-                case ACCIDENTAL_WRITTEN_s: alter = 1; midiBase += 1; break;
-                case ACCIDENTAL_WRITTEN_f: alter = -1; midiBase -= 1; break;
-                case ACCIDENTAL_WRITTEN_ss: alter = 2; midiBase += 2; break;
-                case ACCIDENTAL_WRITTEN_x: alter = 2; midiBase += 2; break;
-                case ACCIDENTAL_WRITTEN_ff: alter = -2; midiBase -= 2; break;
-                case ACCIDENTAL_WRITTEN_xs: alter = 3; midiBase += 3; break;
-                case ACCIDENTAL_WRITTEN_ts: alter = 3; midiBase += 3; break;
-                case ACCIDENTAL_WRITTEN_tf: alter = -3; midiBase -= 3; break;
-                case ACCIDENTAL_WRITTEN_nf: alter = -1; midiBase -= 1; break;
-                case ACCIDENTAL_WRITTEN_ns: alter = 1; midiBase += 1; break;
+                case ACCIDENTAL_WRITTEN_s: alter = 1; break;
+                case ACCIDENTAL_WRITTEN_f: alter = -1; break;
+                case ACCIDENTAL_WRITTEN_ss: alter = 2; break;
+                case ACCIDENTAL_WRITTEN_x: alter = 2; break;
+                case ACCIDENTAL_WRITTEN_ff: alter = -2; break;
+                case ACCIDENTAL_WRITTEN_xs: alter = 3; break;
+                case ACCIDENTAL_WRITTEN_ts: alter = 3; break;
+                case ACCIDENTAL_WRITTEN_tf: alter = -3; break;
+                case ACCIDENTAL_WRITTEN_nf: alter = -1; break;
+                case ACCIDENTAL_WRITTEN_ns: alter = 1; break;
+                default: break;
+            }
+            switch (accExp) {
+                case ACCIDENTAL_WRITTEN_s: midiBase += 1; break;
+                case ACCIDENTAL_WRITTEN_f: midiBase -= 1; break;
+                case ACCIDENTAL_WRITTEN_ss: midiBase += 2; break;
+                case ACCIDENTAL_WRITTEN_x: midiBase += 2; break;
+                case ACCIDENTAL_WRITTEN_ff: midiBase -= 2; break;
+                case ACCIDENTAL_WRITTEN_xs: midiBase += 3; break;
+                case ACCIDENTAL_WRITTEN_ts: midiBase += 3; break;
+                case ACCIDENTAL_WRITTEN_tf: midiBase -= 3; break;
+                case ACCIDENTAL_WRITTEN_nf: midiBase -= 1; break;
+                case ACCIDENTAL_WRITTEN_ns: midiBase += 1; break;
                 default: break;
             }
         }

@@ -1399,7 +1399,7 @@ void Toolkit::CreateTimemap(bool force)
         LogWarning("Calculation of MIDI timemap failed, time value is invalid.");
     }
 }
-    
+
 std::string Toolkit::GetElementsAtTime(int millisec)
 {
     this->ResetLogBuffer();
