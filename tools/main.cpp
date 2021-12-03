@@ -427,7 +427,8 @@ int main(int argc, char **argv)
     }
 
     if ((outformat != "svg") && (outformat != "mei") && (outformat != "midi") && (outformat != "timemap")
-        && (outformat != "humdrum") && (outformat != "hum") && (outformat != "pae") && (outformat != "pb-mei")) {
+        && (outformat != "svgmidi") && (outformat != "humdrum") && (outformat != "hum") && (outformat != "pae")
+        && (outformat != "pb-mei")) {
         std::cerr << "Output format (" << outformat
                   << ") can only be 'mei', 'pb-mei', 'svg', 'midi', 'humdrum' or 'pae'." << std::endl;
         exit(1);
